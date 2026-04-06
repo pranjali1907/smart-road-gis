@@ -1,0 +1,100 @@
+All property keys: ['contractor', 'drinage ty', 'fid', 'from china', 'la repair', 'maintainan', 'remark', 'road id', 'road name', 'road type', 'sr.no', 'sur materi', 'to chinage', 'total leng', 'ward no', 'width', 'y construc', 'zone']
+
+=== Features with road name (5) ===
+
+  Name: main road
+  fid: 566
+  sr.no: 1
+  road type: concreat
+  sur materi: rigid
+  zone: 43
+  ward no: 1
+  total leng: 155
+  width: 60
+  from china: 30
+  to chinage: 35
+  contractor: xyz
+  y construc: 2023
+  la repair: 2022
+  drainage ty: None
+  remark: no
+  Points: 65, first: [74.527928, 16.883315], last: [74.619193, 16.839528]
+
+  Name: gully
+  fid: 567
+  sr.no: 2
+  road type: earthen
+  sur materi: None
+  zone: 43
+  ward no: None
+  total leng: 55
+  width: 25
+  from china: 30
+  to chinage: 30
+  contractor: xyz
+  y construc: 2022
+  la repair: 2023
+  drainage ty: None
+  remark: no
+  Points: 29, first: [74.541149, 16.885627], last: [74.554386, 16.863232]
+
+  Name: gully
+  fid: 568
+  sr.no: 3
+  road type: earthen
+  sur materi: None
+  zone: 43
+  ward no: None
+  total leng: 35
+  width: 35
+  from china: 25
+  to chinage: 20
+  contractor: xyz
+  y construc: 2023
+  la repair: 2023
+  drainage ty: None
+  remark: no
+  Points: 14, first: [74.539059, 16.877596], last: [74.543334, 16.870014]
+
+  Name: earthen
+  fid: 569
+  sr.no: 4
+  road type: earthen
+  sur materi: None
+  zone: 43
+  ward no: None
+  total leng: 35
+  width: 35
+  from china: 25
+  to chinage: 20
+  contractor: xyz
+  y construc: 2023
+  la repair: 2023
+  drainage ty: None
+  remark: no
+  Points: 6, first: [74.54615, 16.874341], last: [74.546241, 16.868267]
+
+  Name: village
+  fid: 570
+  sr.no: 5
+  road type: earthen
+  sur materi: None
+  zone: 43
+  ward no: None
+  total leng: 35
+  width: 35
+  from china: 30
+  to chinage: 29
+  contractor: xyz
+  y construc: 2023
+  la repair: 2023
+  drainage ty: None
+  remark: no
+  Points: 41, first: [74.520012, 16.865858], last: [74.555046, 16.861417]
+
+=== Geometry stats ===
+  Min points: 2
+  Max points: 65
+  Avg points: 3.5
+  Total road segments: 2652
+  Features with >2 non-null properties: 5

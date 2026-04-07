@@ -111,8 +111,8 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
         <table className="registry-table">
           <thead>
             <tr>
-              <th onClick={() => toggleSort('id')}>
-                ID <ArrowUpDown size={12} />
+              <th onClick={() => toggleSort('srNo')}>
+                Sr. No. <ArrowUpDown size={12} />
               </th>
               <th onClick={() => toggleSort('name')}>
                 Road Name <ArrowUpDown size={12} />
@@ -141,7 +141,7 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
           <tbody>
             {paged.map(road => (
               <tr key={road.id} onClick={() => onSelectRoad(road.id)} className="registry-row">
-                <td className="road-id">{road.id}</td>
+                <td className="road-id">{road.srNo ?? '—'}</td>
                 <td className="road-name-cell">
                   <span className="road-name-text">{road.name}</span>
                 </td>

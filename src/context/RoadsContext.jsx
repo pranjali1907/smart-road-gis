@@ -4,7 +4,7 @@ import { INITIAL_ROADS } from '../data/sampleRoads';
 const RoadsContext = createContext(null);
 
 // Bump this when INITIAL_ROADS changes to force reload from fresh data
-const DATA_VERSION = 'v4-gpkg-2652';
+const DATA_VERSION = 'v5-srno-sync-zones78';
 
 function getStoredRoads() {
   try {
@@ -70,7 +70,8 @@ export function RoadsProvider({ children }) {
       counter++;
       id = `RD-${String(counter).padStart(3, '0')}`;
     }
-    const newRoad = { ...roadData, id };
+    const numericId = parseInt(id.replace('RD-', ''), 10);
+    const newRoad = { ...roadData, id, srNo: numericId };
     setRoads(prev => [...prev, newRoad]);
     addHistoryEntry(id, roadData.name, 'Created', '', 'New road added', editedBy);
     return newRoad;

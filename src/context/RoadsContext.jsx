@@ -1,140 +1,165 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { INITIAL_ROADS } from '../data/sampleRoads';
+import { useDatasets } from './DatasetContext';
+import {
+  fetchAllRoads, fetchRoads as fetchRoadsAPI, fetchRoadById as fetchRoadByIdAPI,
+  createRoad as apiCreateRoad, updateRoad as apiUpdateRoad, deleteRoad as apiDeleteRoad,
+  fetchTrash as apiFetchTrash, restoreFromTrash as apiRestore,
+  restoreAllFromTrash as apiRestoreAll, permanentDeleteFromTrash as apiPermDelete,
+  emptyTrash as apiEmptyTrash, fetchHistory as apiFetchHistory,
+  isServerAvailable,
+} from '../api';
+import { ROAD_TYPE_NORMALIZE, DRAINAGE_NORMALIZE, SURFACE_NORMALIZE } from '../data/sampleRoads';
 
 const RoadsContext = createContext(null);
 
-// Bump this when INITIAL_ROADS changes to force reload from fresh data
-const DATA_VERSION = 'v5-srno-sync-zones78';
-
-function getStoredRoads() {
-  try {
-    const storedVersion = localStorage.getItem('smartroad_data_version');
-    if (storedVersion !== DATA_VERSION) {
-      // Data schema or dataset changed — reset to fresh data
-      localStorage.removeItem('smartroad_roads');
-      localStorage.setItem('smartroad_data_version', DATA_VERSION);
-      return INITIAL_ROADS;
-    }
-    const stored = localStorage.getItem('smartroad_roads');
-    return stored ? JSON.parse(stored) : INITIAL_ROADS;
-  } catch {
-    return INITIAL_ROADS;
+/* ─── Normalization helper ─── */
+function normalizeRoad(road) {
+  const r = { ...road };
+  if (r.roadType) {
+    const lower = r.roadType.toLowerCase();
+    if (ROAD_TYPE_NORMALIZE[lower]) r.roadType = ROAD_TYPE_NORMALIZE[lower];
   }
-}
-
-function getStoredHistory() {
-  try {
-    const stored = localStorage.getItem('smartroad_history');
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
+  if (r.drainageType) {
+    const lower = r.drainageType.toLowerCase();
+    if (DRAINAGE_NORMALIZE[lower]) r.drainageType = DRAINAGE_NORMALIZE[lower];
   }
+  if (r.surfaceMaterial) {
+    const lower = r.surfaceMaterial.toLowerCase();
+    if (SURFACE_NORMALIZE[lower]) r.surfaceMaterial = SURFACE_NORMALIZE[lower];
+  }
+  return r;
 }
 
 export function RoadsProvider({ children }) {
-  const [roads, setRoads] = useState(getStoredRoads);
-  const [history, setHistory] = useState(getStoredHistory);
+  const { activeDatasetId } = useDatasets();
 
+  const [roads, setRoads] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [trash, setTrash] = useState([]);
+  const [serverOnline, setServerOnline] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // Load all roads for the active dataset (used by map + dashboard)
+  const loadRoads = useCallback(async () => {
+    if (!activeDatasetId) { setRoads([]); return; }
+    setLoading(true);
+    try {
+      const data = await fetchAllRoads(activeDatasetId);
+      setRoads((data || []).map(normalizeRoad));
+    } catch {
+      setRoads([]);
+    }
+    setLoading(false);
+  }, [activeDatasetId]);
+
+  // Load history
+  const loadHistory = useCallback(async () => {
+    if (!activeDatasetId) { setHistory([]); return; }
+    const result = await apiFetchHistory({ datasetId: activeDatasetId, limit: 500 });
+    setHistory(result.entries || []);
+  }, [activeDatasetId]);
+
+  // Load trash
+  const loadTrash = useCallback(async () => {
+    if (!activeDatasetId) { setTrash([]); return; }
+    const data = await apiFetchTrash(activeDatasetId);
+    setTrash(data || []);
+  }, [activeDatasetId]);
+
+  // Check server on mount
   useEffect(() => {
-    localStorage.setItem('smartroad_roads', JSON.stringify(roads));
-  }, [roads]);
-
-  useEffect(() => {
-    localStorage.setItem('smartroad_history', JSON.stringify(history));
-  }, [history]);
-
-  const addHistoryEntry = useCallback((roadId, roadName, fieldName, oldValue, newValue, editedBy) => {
-    const entry = {
-      id: Date.now() + Math.random(),
-      roadId,
-      roadName,
-      fieldName,
-      oldValue: String(oldValue ?? ''),
-      newValue: String(newValue ?? ''),
-      editedBy,
-      timestamp: new Date().toISOString()
-    };
-    setHistory(prev => [entry, ...prev]);
+    isServerAvailable().then(setServerOnline);
   }, []);
+
+  // Reload everything when dataset changes
+  useEffect(() => {
+    if (activeDatasetId) {
+      loadRoads();
+      loadHistory();
+      loadTrash();
+    } else {
+      setRoads([]);
+      setHistory([]);
+      setTrash([]);
+    }
+  }, [activeDatasetId, loadRoads, loadHistory, loadTrash]);
 
   const getRoadById = useCallback((id) => {
     return roads.find(r => r.id === id) || null;
   }, [roads]);
 
-  const addRoad = useCallback((roadData, editedBy) => {
-    const newId = `RD-${String(roads.length + 1).padStart(3, '0')}`;
-    // Ensure unique ID
-    let id = newId;
-    let counter = roads.length + 1;
-    while (roads.find(r => r.id === id)) {
-      counter++;
-      id = `RD-${String(counter).padStart(3, '0')}`;
+  const addRoad = useCallback(async (roadData, editedBy) => {
+    if (!activeDatasetId) return null;
+    const result = await apiCreateRoad({ ...roadData, datasetId: activeDatasetId });
+    if (result.success) {
+      await loadRoads();
+      await loadHistory();
     }
-    const numericId = parseInt(id.replace('RD-', ''), 10);
-    const newRoad = { ...roadData, id, srNo: numericId };
-    setRoads(prev => [...prev, newRoad]);
-    addHistoryEntry(id, roadData.name, 'Created', '', 'New road added', editedBy);
-    return newRoad;
-  }, [roads, addHistoryEntry]);
+    return result.road || null;
+  }, [activeDatasetId, loadRoads, loadHistory]);
 
-  const updateRoad = useCallback((id, updates, editedBy) => {
-    setRoads(prev => {
-      const road = prev.find(r => r.id === id);
-      if (!road) return prev;
+  const updateRoad = useCallback(async (id, updates, editedBy) => {
+    if (!activeDatasetId) return;
+    await apiUpdateRoad(activeDatasetId, id, updates);
+    await loadRoads();
+    await loadHistory();
+  }, [activeDatasetId, loadRoads, loadHistory]);
 
-      // Log each changed field individually
-      Object.keys(updates).forEach(field => {
-        if (field === 'geometry' || field === 'id') return;
-        const oldVal = road[field];
-        const newVal = updates[field];
-        if (String(oldVal) !== String(newVal)) {
-          addHistoryEntry(id, road.name, field, oldVal, newVal, editedBy);
-        }
-      });
+  const deleteRoad = useCallback(async (id, editedBy) => {
+    if (!activeDatasetId) return;
+    await apiDeleteRoad(activeDatasetId, id);
+    await loadRoads();
+    await loadHistory();
+    await loadTrash();
+  }, [activeDatasetId, loadRoads, loadHistory, loadTrash]);
 
-      return prev.map(r => r.id === id ? { ...r, ...updates } : r);
-    });
-  }, [addHistoryEntry]);
+  const restoreRoad = useCallback(async (id, restoredBy) => {
+    if (!activeDatasetId) return;
+    await apiRestore(activeDatasetId, id);
+    await loadRoads();
+    await loadHistory();
+    await loadTrash();
+  }, [activeDatasetId, loadRoads, loadHistory, loadTrash]);
 
-  const deleteRoad = useCallback((id, editedBy) => {
-    const road = roads.find(r => r.id === id);
-    if (road) {
-      addHistoryEntry(id, road.name, 'Deleted', road.name, 'Road removed', editedBy);
-    }
-    setRoads(prev => prev.filter(r => r.id !== id));
-  }, [roads, addHistoryEntry]);
+  const permanentDeleteRoad = useCallback(async (id, deletedBy) => {
+    if (!activeDatasetId) return;
+    await apiPermDelete(activeDatasetId, id);
+    await loadHistory();
+    await loadTrash();
+  }, [activeDatasetId, loadHistory, loadTrash]);
+
+  const restoreAllTrash = useCallback(async (restoredBy) => {
+    if (!activeDatasetId) return;
+    await apiRestoreAll(activeDatasetId);
+    await loadRoads();
+    await loadHistory();
+    await loadTrash();
+  }, [activeDatasetId, loadRoads, loadHistory, loadTrash]);
+
+  const emptyTrashAll = useCallback(async (deletedBy) => {
+    if (!activeDatasetId) return;
+    await apiEmptyTrash(activeDatasetId);
+    await loadHistory();
+    await loadTrash();
+  }, [activeDatasetId, loadHistory, loadTrash]);
 
   const searchRoads = useCallback((query) => {
     if (!query) return roads;
     const q = query.toLowerCase();
     return roads.filter(r =>
-      r.id.toLowerCase().includes(q) ||
-      r.name.toLowerCase().includes(q) ||
-      r.zone.toLowerCase().includes(q) ||
-      r.roadType.toLowerCase().includes(q)
+      r.id?.toLowerCase().includes(q) ||
+      r.name?.toLowerCase().includes(q) ||
+      r.zone?.toLowerCase().includes(q) ||
+      r.roadType?.toLowerCase().includes(q)
     );
-  }, [roads]);
-
-  const getNextId = useCallback(() => {
-    let counter = roads.length + 1;
-    let id = `RD-${String(counter).padStart(3, '0')}`;
-    while (roads.find(r => r.id === id)) {
-      counter++;
-      id = `RD-${String(counter).padStart(3, '0')}`;
-    }
-    return id;
   }, [roads]);
 
   return (
     <RoadsContext.Provider value={{
-      roads,
-      history,
-      getRoadById,
-      addRoad,
-      updateRoad,
-      deleteRoad,
-      searchRoads,
-      getNextId,
+      roads, history, trash, serverOnline, loading,
+      getRoadById, addRoad, updateRoad, deleteRoad,
+      restoreRoad, permanentDeleteRoad, restoreAllTrash, emptyTrash: emptyTrashAll,
+      searchRoads, refreshRoads: loadRoads, refreshHistory: loadHistory, refreshTrash: loadTrash,
     }}>
       {children}
     </RoadsContext.Provider>

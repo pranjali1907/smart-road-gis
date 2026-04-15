@@ -91,7 +91,7 @@ export default function AddRoadModal({ onClose }) {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
     const roadData = {
@@ -101,7 +101,7 @@ export default function AddRoadModal({ onClose }) {
         coordinates: drawnPoints,
       },
     };
-    addRoad(roadData, currentUser?.username || 'admin');
+    await addRoad(roadData, currentUser?.username || 'admin');
     onClose();
   };
 

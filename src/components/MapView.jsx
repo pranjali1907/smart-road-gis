@@ -37,7 +37,6 @@ function RoadsGeoJSONLayer({ roads, filter, selectedRoadId, onSelectRoad }) {
   const selectedIdRef = useRef(selectedRoadId);
   const onSelectRef = useRef(onSelectRoad);
 
-  // Keep refs current so the layer callbacks always use latest values
   selectedIdRef.current = selectedRoadId;
   onSelectRef.current = onSelectRoad;
 
@@ -46,7 +45,6 @@ function RoadsGeoJSONLayer({ roads, filter, selectedRoadId, onSelectRoad }) {
     return roads.filter(r => r.roadType === filter);
   }, [roads, filter]);
 
-  // Build a standard GeoJSON FeatureCollection
   const geojsonData = useMemo(() => ({
     type: 'FeatureCollection',
     features: filteredRoads.map(road => ({
@@ -64,7 +62,6 @@ function RoadsGeoJSONLayer({ roads, filter, selectedRoadId, onSelectRoad }) {
     })),
   }), [filteredRoads]);
 
-  // Style factory — reads current zoom + selected ID from refs / map
   const makeStyleFn = useCallback(() => {
     const zoom = map.getZoom();
     const w = getWeightForZoom(zoom);
@@ -84,7 +81,6 @@ function RoadsGeoJSONLayer({ roads, filter, selectedRoadId, onSelectRoad }) {
     };
   }, [map]);
 
-  // Create / recreate layer when DATA changes
   useEffect(() => {
     if (layerRef.current) {
       map.removeLayer(layerRef.current);
@@ -118,14 +114,12 @@ function RoadsGeoJSONLayer({ roads, filter, selectedRoadId, onSelectRoad }) {
     };
   }, [geojsonData, map, makeStyleFn]);
 
-  // Re‑style when SELECTION changes (no data rebuild needed)
   useEffect(() => {
     if (layerRef.current) {
       layerRef.current.setStyle(makeStyleFn());
     }
   }, [selectedRoadId, makeStyleFn]);
 
-  // Re‑style on zoom change (adjust weight)
   useMapEvents({
     zoomend: () => {
       if (layerRef.current) {
@@ -184,6 +178,7 @@ export default function MapView({ selectedRoadId, onSelectRoad }) {
           zoom={15}
           style={{ width: '100%', height: '100%' }}
           zoomControl={true}
+          preferCanvas={true}
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

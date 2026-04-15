@@ -1,13 +1,15 @@
 import { useMemo } from 'react';
 import { useRoads } from '../context/RoadsContext';
+import { useDatasets } from '../context/DatasetContext';
 import { ROAD_TYPE_COLORS, STATUS_COLORS } from '../data/sampleRoads';
 import {
   Route, MapPin, Ruler, AlertTriangle, CheckCircle2, BarChart3,
-  TrendingUp, ArrowRight, Construction
+  TrendingUp, ArrowRight, Construction, History, Database
 } from 'lucide-react';
 
 export default function Dashboard({ onViewOnMap }) {
-  const { roads, history } = useRoads();
+  const { roads, history, loading } = useRoads();
+  const { activeDataset } = useDatasets();
 
   const stats = useMemo(() => {
     const totalLength = roads.reduce((sum, r) => sum + (r.length || 0), 0);
@@ -32,8 +34,28 @@ export default function Dashboard({ onViewOnMap }) {
   const recentEdits = history.slice(0, 5);
   const poorRoads = roads.filter(r => r.status === 'Poor');
 
+  if (loading) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-loading">
+          <Database size={40} className="spin-icon" />
+          <p>Loading dataset...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard">
+      {/* Dataset info banner */}
+      {activeDataset && (
+        <div className="dashboard-dataset-banner">
+          <Database size={16} />
+          <span>Viewing: <strong>{activeDataset.name}</strong></span>
+          <span className="dataset-banner-meta">({activeDataset.roadCount} roads)</span>
+        </div>
+      )}
+
       {/* Stat cards */}
       <div className="stat-grid">
         <div className="stat-card" style={{ '--accent': '#2563eb' }}>
@@ -107,7 +129,7 @@ export default function Dashboard({ onViewOnMap }) {
                         className="type-dot"
                         style={{ background: ROAD_TYPE_COLORS[type] || '#94a3b8' }}
                       />
-                      <span>{type}</span>
+                      <span>{type || 'Unclassified'}</span>
                       <span className="type-count">{count}</span>
                     </div>
                     <div className="type-bar-track">
@@ -157,7 +179,7 @@ export default function Dashboard({ onViewOnMap }) {
             <div className="surface-list">
               {Object.entries(stats.bySurface).map(([mat, count]) => (
                 <div key={mat} className="surface-item">
-                  <span className="surface-name">{mat}</span>
+                  <span className="surface-name">{mat || 'Unknown'}</span>
                   <div className="surface-bar-track">
                     <div
                       className="surface-bar-fill"
@@ -184,10 +206,10 @@ export default function Dashboard({ onViewOnMap }) {
               <p className="empty-msg">All roads are in acceptable condition</p>
             ) : (
               <div className="attention-list">
-                {poorRoads.map(road => (
+                {poorRoads.slice(0, 10).map(road => (
                   <div key={road.id} className="attention-item">
                     <div className="attention-info">
-                      <span className="attention-name">{road.name}</span>
+                      <span className="attention-name">{road.name || 'Unnamed Road'}</span>
                       <span className="attention-meta">{road.zone} · {road.roadType} · {road.length} km</span>
                     </div>
                     <button
@@ -232,15 +254,5 @@ export default function Dashboard({ onViewOnMap }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function History({ size }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" />
-      <path d="M12 7v5l4 2" />
-    </svg>
   );
 }

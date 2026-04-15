@@ -1,18 +1,26 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRoads } from '../context/RoadsContext';
 import { useAuth } from '../context/AuthContext';
+import { useDatasets } from '../context/DatasetContext';
+import { fetchRoads } from '../api';
 import { ROAD_TYPE_COLORS, STATUS_COLORS, ROAD_TYPES, ROAD_STATUSES } from '../data/sampleRoads';
 import {
-  Search, Filter, Plus, MapPin, ChevronDown, ArrowUpDown,
-  Eye, Trash2, ChevronLeft, ChevronRight
+  Search, Filter, Plus, MapPin, ArrowUpDown,
+  Eye, Trash2, ChevronLeft, ChevronRight, AlertTriangle, X, RefreshCw
 } from 'lucide-react';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
 
 export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
-  const { roads, deleteRoad } = useRoads();
+  const { deleteRoad } = useRoads();
   const { isAdmin, currentUser } = useAuth();
+  const { activeDatasetId } = useDatasets();
 
+  // API State
+  const [data, setData] = useState({ roads: [], total: 0, totalPages: 1 });
+  const [loading, setLoading] = useState(false);
+
+  // Filter State
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -20,36 +28,36 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
   const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
 
-  const filtered = useMemo(() => {
-    let list = [...roads];
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(r =>
-        r.id.toLowerCase().includes(q) ||
-        r.name.toLowerCase().includes(q) ||
-        r.zone.toLowerCase().includes(q) ||
-        r.contractor?.toLowerCase().includes(q)
-      );
+  // Fetch data from API
+  const loadData = useCallback(async () => {
+    if (!activeDatasetId) return;
+    setLoading(true);
+    try {
+      const result = await fetchRoads({
+        datasetId: activeDatasetId,
+        page,
+        limit: PAGE_SIZE,
+        search: searchQuery,
+        type: typeFilter,
+        status: statusFilter,
+        sortField,
+        sortDir
+      });
+      setData(result);
+    } catch (err) {
+      console.error('Failed to fetch roads:', err);
+    } finally {
+      setLoading(false);
     }
+  }, [activeDatasetId, page, searchQuery, typeFilter, statusFilter, sortField, sortDir]);
 
-    if (typeFilter !== 'All') list = list.filter(r => r.roadType === typeFilter);
-    if (statusFilter !== 'All') list = list.filter(r => r.status === statusFilter);
-
-    list.sort((a, b) => {
-      let av = a[sortField], bv = b[sortField];
-      if (typeof av === 'string') av = av.toLowerCase();
-      if (typeof bv === 'string') bv = bv.toLowerCase();
-      if (av < bv) return sortDir === 'asc' ? -1 : 1;
-      if (av > bv) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return list;
-  }, [roads, searchQuery, typeFilter, statusFilter, sortField, sortDir]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const toggleSort = (field) => {
     if (sortField === field) {
@@ -58,12 +66,31 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
       setSortField(field);
       setSortDir('asc');
     }
+    setPage(1);
   };
 
-  const handleDelete = (road) => {
-    if (confirm(`Delete "${road.name}"? This action cannot be undone.`)) {
-      deleteRoad(road.id, currentUser?.username || 'admin');
-    }
+  const handleSearchChange = (val) => {
+    setSearchQuery(val);
+    setPage(1);
+  };
+
+  const handleFilterChange = (type, val) => {
+    if (type === 'type') setTypeFilter(val);
+    if (type === 'status') setStatusFilter(val);
+    setPage(1);
+  };
+
+  const handleDeleteClick = (road) => {
+    setDeleteTarget(road);
+    setDeleteConfirmText('');
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    await deleteRoad(deleteTarget.id, currentUser?.username || 'admin');
+    setDeleteTarget(null);
+    setDeleteConfirmText('');
+    loadData(); // Refresh current page
   };
 
   return (
@@ -76,20 +103,20 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
             type="text"
             placeholder="Search by name, ID, zone, contractor..."
             value={searchQuery}
-            onChange={e => { setSearchQuery(e.target.value); setPage(1); }}
+            onChange={e => handleSearchChange(e.target.value)}
           />
         </div>
 
         <div className="registry-filters">
           <div className="filter-select">
             <Filter size={14} />
-            <select value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setPage(1); }}>
+            <select value={typeFilter} onChange={e => handleFilterChange('type', e.target.value)}>
               <option value="All">All Types</option>
-              {ROAD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              {ROAD_TYPES.map(t => <option key={t} value={t}>{t || 'Unknown'}</option>)}
             </select>
           </div>
           <div className="filter-select">
-            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
+            <select value={statusFilter} onChange={e => handleFilterChange('status', e.target.value)}>
               <option value="All">All Status</option>
               {ROAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -103,51 +130,55 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
 
       {/* Results summary */}
       <div className="registry-summary">
-        <span>Showing {paged.length} of {filtered.length} road{filtered.length !== 1 ? 's' : ''}</span>
+        {loading ? (
+          <span className="loading-indicator"><RefreshCw size={14} className="spin-icon" /> Updating...</span>
+        ) : (
+          <span>Showing {data.roads.length} of {data.total} road{data.total !== 1 ? 's' : ''}</span>
+        )}
       </div>
 
       {/* Table */}
-      <div className="registry-table-wrap">
+      <div className={`registry-table-wrap ${loading ? 'loading-opacity' : ''}`}>
         <table className="registry-table">
           <thead>
             <tr>
-              <th onClick={() => toggleSort('srNo')}>
-                Sr. No. <ArrowUpDown size={12} />
+              <th onClick={() => toggleSort('sr_no')}>
+                Sr. No. <ArrowUpDown size={12} className={sortField === 'sr_no' ? 'active' : ''} />
               </th>
               <th onClick={() => toggleSort('name')}>
-                Road Name <ArrowUpDown size={12} />
+                Road Name <ArrowUpDown size={12} className={sortField === 'name' ? 'active' : ''} />
               </th>
-              <th onClick={() => toggleSort('roadType')}>
-                Type <ArrowUpDown size={12} />
+              <th onClick={() => toggleSort('road_type')}>
+                Type <ArrowUpDown size={12} className={sortField === 'road_type' ? 'active' : ''} />
               </th>
               <th onClick={() => toggleSort('length')}>
-                Length (km) <ArrowUpDown size={12} />
+                Length (km) <ArrowUpDown size={12} className={sortField === 'length' ? 'active' : ''} />
               </th>
               <th onClick={() => toggleSort('width')}>
-                Width (m) <ArrowUpDown size={12} />
+                Width (m) <ArrowUpDown size={12} className={sortField === 'width' ? 'active' : ''} />
               </th>
               <th onClick={() => toggleSort('status')}>
-                Status <ArrowUpDown size={12} />
+                Status <ArrowUpDown size={12} className={sortField === 'status' ? 'active' : ''} />
               </th>
               <th onClick={() => toggleSort('zone')}>
-                Zone <ArrowUpDown size={12} />
+                Zone <ArrowUpDown size={12} className={sortField === 'zone' ? 'active' : ''} />
               </th>
-              <th onClick={() => toggleSort('wardNo')}>
-                Ward <ArrowUpDown size={12} />
+              <th onClick={() => toggleSort('ward_no')}>
+                Ward <ArrowUpDown size={12} className={sortField === 'ward_no' ? 'active' : ''} />
               </th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {paged.map(road => (
+            {data.roads.map(road => (
               <tr key={road.id} onClick={() => onSelectRoad(road.id)} className="registry-row">
                 <td className="road-id">{road.srNo ?? '—'}</td>
                 <td className="road-name-cell">
-                  <span className="road-name-text">{road.name}</span>
+                  <span className="road-name-text">{road.name || '—'}</span>
                 </td>
                 <td>
                   <span className="type-badge" style={{ '--badge-color': ROAD_TYPE_COLORS[road.roadType] || '#94a3b8' }}>
-                    {road.roadType}
+                    {road.roadType || 'Unknown'}
                   </span>
                 </td>
                 <td>{road.length}</td>
@@ -157,7 +188,7 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
                     {road.status}
                   </span>
                 </td>
-                <td className="zone-cell">{road.zone}</td>
+                <td className="zone-cell">{road.zone || '—'}</td>
                 <td>{road.wardNo || '—'}</td>
                 <td className="actions-cell" onClick={e => e.stopPropagation()}>
                   <button className="action-btn" title="View on Map" onClick={() => onViewOnMap(road.id)}>
@@ -167,14 +198,18 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
                     <Eye size={14} />
                   </button>
                   {isAdmin && (
-                    <button className="action-btn danger" title="Delete" onClick={() => handleDelete(road)}>
+                    <button
+                      className="action-btn danger"
+                      title="Move to Trash"
+                      onClick={() => handleDeleteClick(road)}
+                    >
                       <Trash2 size={14} />
                     </button>
                   )}
                 </td>
               </tr>
             ))}
-            {paged.length === 0 && (
+            {data.roads.length === 0 && !loading && (
               <tr>
                 <td colSpan="9" className="empty-table">
                   No roads found matching your filters
@@ -186,31 +221,72 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {data.totalPages > 1 && (
         <div className="registry-pagination">
           <button
-            className="page-btn"
+            className="page-nav-btn"
             onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
+            disabled={page === 1 || loading}
           >
             <ChevronLeft size={16} />
+            Previous
           </button>
-          {Array.from({ length: totalPages }, (_, i) => (
-            <button
-              key={i + 1}
-              className={`page-btn ${page === i + 1 ? 'active' : ''}`}
-              onClick={() => setPage(i + 1)}
-            >
-              {i + 1}
-            </button>
-          ))}
+
+          <div className="page-info">
+            <span className="page-current">Page {page}</span>
+            <span className="page-total">of {data.totalPages}</span>
+          </div>
+
           <button
-            className="page-btn"
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
+            className="page-nav-btn"
+            onClick={() => setPage(p => Math.min(data.totalPages, p + 1))}
+            disabled={page === data.totalPages || loading}
           >
+            Next
             <ChevronRight size={16} />
           </button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="delete-confirm-modal animate-scale-in" onClick={e => e.stopPropagation()}>
+            <div className="delete-confirm-header">
+              <div className="delete-confirm-icon">
+                <AlertTriangle size={28} />
+              </div>
+              <button className="btn-icon" onClick={() => setDeleteTarget(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="delete-confirm-body">
+              <h3>Move Road to Trash?</h3>
+              <p>You are about to move <strong>{deleteTarget.name || deleteTarget.id}</strong> to the trash.</p>
+              <div className="delete-confirm-input-group">
+                <label>Type <strong>DELETE</strong> to confirm:</label>
+                <input
+                  type="text"
+                  placeholder="Type DELETE here"
+                  value={deleteConfirmText}
+                  onChange={e => setDeleteConfirmText(e.target.value)}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="delete-confirm-footer">
+              <button className="btn-secondary" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button
+                className="btn-danger"
+                onClick={handleDeleteConfirm}
+                disabled={deleteConfirmText.toUpperCase() !== 'DELETE'}
+              >
+                <Trash2 size={14} /> Move to Trash
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

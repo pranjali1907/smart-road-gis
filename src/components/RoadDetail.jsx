@@ -30,9 +30,9 @@ export default function RoadDetail({ roadId, onClose }) {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = () => {
-    const { id, geometry, ...updates } = form;
-    updateRoad(roadId, updates, currentUser?.username || 'unknown');
+  const handleSave = async () => {
+    const { id, geometry, datasetId, ...updates } = form;
+    await updateRoad(roadId, updates, currentUser?.username || 'unknown');
     setEditing(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -109,10 +109,10 @@ export default function RoadDetail({ roadId, onClose }) {
       <div className="detail-header">
         <div className="detail-title-group">
           <span className="detail-id">Sr. No. {road.srNo} — {road.id}</span>
-          <h2 className="detail-title">{road.name}</h2>
+          <h2 className="detail-title">{road.name || 'Unnamed Road'}</h2>
           <div className="detail-badges">
             <span className="type-badge" style={{ '--badge-color': ROAD_TYPE_COLORS[road.roadType] || '#94a3b8' }}>
-              {road.roadType}
+              {road.roadType || 'Unknown'}
             </span>
             <span className="status-badge" style={{ '--badge-color': STATUS_COLORS[road.status] || '#94a3b8' }}>
               {road.status}

@@ -1,185 +1,192 @@
-import { useState, useMemo } from 'react';
-import { useRoads } from '../context/RoadsContext';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Search, Clock, ArrowRight, LogIn, LogOut, UserPlus, Filter } from 'lucide-react';
+import { useDatasets } from '../context/DatasetContext';
+import { fetchHistory, getHistoryExportUrl } from '../api';
+import {
+  History, User, Calendar, FileEdit, ArrowUpRight,
+  Download, Search, RefreshCw, ChevronLeft, ChevronRight, Filter
+} from 'lucide-react';
+
+const PAGE_SIZE = 25;
 
 export default function EditHistory() {
-  const { history } = useRoads();
-  const { loginActivity } = useAuth();
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all'); // 'all' | 'edits' | 'activity'
+  const { activeDataset, activeDatasetId } = useDatasets();
+  const { currentUser } = useAuth();
 
-  // Merge road edit history and user login/signup/logout activity into one timeline
-  const mergedTimeline = useMemo(() => {
-    const edits = history.map(e => ({ ...e, type: 'edit' }));
-    const activities = (loginActivity || []).map(a => ({
-      id: `activity-${a.timestamp}-${a.userId}`,
-      type: 'activity',
-      action: a.action,
-      username: a.username,
-      timestamp: a.timestamp,
-    }));
+  // API State
+  const [data, setData] = useState({ entries: [], total: 0, totalPages: 1 });
+  const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
-    let combined;
-    if (filter === 'edits') combined = edits;
-    else if (filter === 'activity') combined = activities;
-    else combined = [...edits, ...activities];
+  // Filter State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
 
-    // Sort by timestamp descending (newest first)
-    combined.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    return combined;
-  }, [history, loginActivity, filter]);
+  const loadData = useCallback(async () => {
+    if (!activeDatasetId) return;
+    setLoading(true);
+    try {
+      const result = await fetchHistory({
+        datasetId: activeDatasetId,
+        page,
+        limit: PAGE_SIZE,
+        search: searchQuery
+      });
+      setData(result);
+    } catch (err) {
+      console.error('Failed to fetch history:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeDatasetId, page, searchQuery]);
 
-  const filtered = useMemo(() => {
-    if (!search) return mergedTimeline;
-    const q = search.toLowerCase();
-    return mergedTimeline.filter(e => {
-      if (e.type === 'edit') {
-        return (
-          e.roadName?.toLowerCase().includes(q) ||
-          e.fieldName?.toLowerCase().includes(q) ||
-          e.editedBy?.toLowerCase().includes(q) ||
-          e.roadId?.toLowerCase().includes(q)
-        );
-      }
-      // activity entries
-      return (
-        e.username?.toLowerCase().includes(q) ||
-        e.action?.toLowerCase().includes(q)
-      );
-    });
-  }, [mergedTimeline, search]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  const formatTime = (iso) => {
-    const d = new Date(iso);
-    const now = new Date();
-    const diffMs = now - d;
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return 'Just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}h ago`;
-    const diffDay = Math.floor(diffHr / 24);
-    if (diffDay < 7) return `${diffDay}d ago`;
-    return d.toLocaleDateString();
-  };
-
-  const getActivityIcon = (action) => {
-    switch (action) {
-      case 'login': return <LogIn size={14} />;
-      case 'logout': return <LogOut size={14} />;
-      case 'signup': return <UserPlus size={14} />;
-      default: return <LogIn size={14} />;
+  const handleExport = async () => {
+    if (!activeDatasetId) return;
+    setExporting(true);
+    try {
+      const url = getHistoryExportUrl(activeDatasetId);
+      window.open(url, '_blank');
+    } catch (err) {
+      console.error('Export failed:', err);
+    } finally {
+      setExporting(false);
     }
   };
 
-  const getActivityLabel = (action) => {
-    switch (action) {
-      case 'login': return 'signed in';
-      case 'logout': return 'signed out';
-      case 'signup': return 'registered';
-      default: return action;
-    }
+  const getActivityIcon = (field) => {
+    if (field === 'Road Created') return <ArrowUpRight size={14} className="icon-success" />;
+    if (field === 'Road Deleted') return <ArrowUpRight size={14} className="icon-danger" />;
+    return <FileEdit size={14} className="icon-primary" />;
   };
 
-  const editCount = filtered.filter(e => e.type === 'edit').length;
-  const activityCount = filtered.filter(e => e.type === 'activity').length;
+  const formatDate = (dateStr) => {
+    try {
+      return new Date(dateStr).toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+    } catch { return dateStr; }
+  };
 
   return (
-    <div className="edit-history">
+    <div className="history-view">
+      <div className="view-header">
+        <div className="header-main">
+          <h2><History size={20} /> Edit History & Audit Logs</h2>
+          <p className="header-subtitle">
+            Tracking changes for <strong>{activeDataset?.name || 'Selected Dataset'}</strong>
+          </p>
+        </div>
+
+        <div className="header-actions">
+          <button
+            className="btn-export-excel"
+            onClick={handleExport}
+            disabled={exporting || loading || !activeDatasetId}
+          >
+            {exporting ? <RefreshCw size={16} className="spin-icon" /> : <Download size={16} />}
+            {exporting ? 'Preparing Excel...' : 'Export History (XLSX)'}
+          </button>
+        </div>
+      </div>
+
       <div className="history-toolbar">
         <div className="history-search">
           <Search size={16} />
           <input
             type="text"
-            placeholder="Search edits by road, field, editor, or user..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by road name, user, or field..."
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setPage(1); }}
           />
         </div>
-        <div className="history-filter-group">
-          <div className="history-filter-buttons">
-            <button
-              className={`filter-chip ${filter === 'all' ? 'active' : ''}`}
-              onClick={() => setFilter('all')}
-            >
-              All
-            </button>
-            <button
-              className={`filter-chip ${filter === 'edits' ? 'active' : ''}`}
-              onClick={() => setFilter('edits')}
-            >
-              Road Edits
-            </button>
-            <button
-              className={`filter-chip ${filter === 'activity' ? 'active' : ''}`}
-              onClick={() => setFilter('activity')}
-            >
-              User Activity
-            </button>
-          </div>
-          <span className="history-count">
-            {filtered.length} item{filtered.length !== 1 ? 's' : ''}
-            {filter === 'all' && ` (${editCount} edits, ${activityCount} logins)`}
-          </span>
+        <div className="history-stats">
+          <span>Total entries: <strong>{data.total}</strong></span>
         </div>
       </div>
 
-      <div className="history-list">
-        {filtered.length === 0 ? (
-          <div className="history-empty">
-            <Clock size={40} />
-            <p>No history yet</p>
-            <span>Changes and user activity will appear here</span>
-          </div>
-        ) : (
-          filtered.map(entry => (
-            entry.type === 'edit' ? (
-              /* Road edit entry */
-              <div key={entry.id} className="history-card">
-                <div className="history-timeline-dot" />
-                <div className="history-card-body">
-                  <div className="history-card-top">
-                    <span className="history-road">{entry.roadName || 'Unnamed Road'}</span>
-                    <span className="history-road-id">{entry.roadId}</span>
-                    <span className="history-time">{formatTime(entry.timestamp)}</span>
+      <div className={`history-container ${loading ? 'loading-opacity' : ''}`}>
+        {data.entries.length > 0 ? (
+          <>
+            <div className="history-timeline">
+              {data.entries.map((entry) => (
+                <div key={entry.id} className="history-item animate-fade-in">
+                  <div className="history-marker">
+                    {getActivityIcon(entry.fieldName)}
                   </div>
-                  <div className="history-card-detail">
-                    <span className="history-field">{entry.fieldName}</span>
-                    {entry.oldValue && entry.newValue && entry.fieldName !== 'Created' && entry.fieldName !== 'Deleted' ? (
-                      <div className="history-diff">
-                        <span className="diff-old">{entry.oldValue}</span>
-                        <ArrowRight size={12} />
-                        <span className="diff-new">{entry.newValue}</span>
+
+                  <div className="history-content">
+                    <div className="history-top">
+                      <span className="history-road">
+                        {entry.roadName || 'Unnamed Road'}
+                        <small>{entry.roadId}</small>
+                      </span>
+                      <span className="history-time">
+                        <Calendar size={12} />
+                        {formatDate(entry.timestamp)}
+                      </span>
+                    </div>
+
+                    <div className="history-body">
+                      <span className="history-field">{entry.fieldName}</span>
+                      <div className="history-change">
+                        <span className="val-old">{entry.oldValue || '∅'}</span>
+                        <span className="change-arrow">→</span>
+                        <span className="val-new">{entry.newValue || '∅'}</span>
                       </div>
-                    ) : (
-                      <span className="history-action-text">{entry.newValue}</span>
-                    )}
-                  </div>
-                  <span className="history-editor">by {entry.editedBy || 'System'}</span>
-                </div>
-              </div>
-            ) : (
-              /* User activity entry */
-              <div key={entry.id} className="history-card activity-card">
-                <div className={`history-timeline-dot activity-dot ${entry.action}`} />
-                <div className="history-card-body">
-                  <div className="history-card-top">
-                    <span className="history-activity-icon">{getActivityIcon(entry.action)}</span>
-                    <span className="history-road">
-                      <strong>{entry.username}</strong> {getActivityLabel(entry.action)}
-                    </span>
-                    <span className="history-time">{formatTime(entry.timestamp)}</span>
-                  </div>
-                  <div className="history-card-detail">
-                    <span className={`activity-badge ${entry.action}`}>
-                      {entry.action === 'login' ? '🔓 Sign In' : entry.action === 'logout' ? '🔒 Sign Out' : '✨ New Registration'}
-                    </span>
+                    </div>
+
+                    <div className="history-footer">
+                      <span className="history-user">
+                        <User size={12} />
+                        Edited by <strong>{entry.editedBy}</strong>
+                      </span>
+                    </div>
                   </div>
                 </div>
+              ))}
+            </div>
+
+            {data.totalPages > 1 && (
+              <div className="registry-pagination">
+                <button
+                  className="page-nav-btn"
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1 || loading}
+                >
+                  <ChevronLeft size={16} />
+                  Previous
+                </button>
+
+                <div className="page-info">
+                  <span className="page-current">Page {page}</span>
+                  <span className="page-total">of {data.totalPages}</span>
+                </div>
+
+                <button
+                  className="page-nav-btn"
+                  onClick={() => setPage(p => Math.min(data.totalPages, p + 1))}
+                  disabled={page === data.totalPages || loading}
+                >
+                  Next
+                  <ChevronRight size={16} />
+                </button>
               </div>
-            )
-          ))
+            )}
+          </>
+        ) : (
+          <div className="empty-state">
+            {!loading && (
+              <>
+                <History size={48} className="empty-icon" />
+                <p>No edit history found for this dataset.</p>
+              </>
+            )}
+          </div>
         )}
       </div>
     </div>

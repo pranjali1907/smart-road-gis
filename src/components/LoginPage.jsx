@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { MapPin, Eye, EyeOff, LogIn, UserPlus, Shield, User } from 'lucide-react';
+import { MapPin, Eye, EyeOff, LogIn, UserPlus, Shield, User, Crown } from 'lucide-react';
 
 export default function LoginPage() {
   const { login, signup } = useAuth();
@@ -30,23 +30,24 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    // Simulate tiny network delay for polish
-    await new Promise(r => setTimeout(r, 400));
-
-    if (mode === 'login') {
-      const result = login(form.username, form.password, form.remember);
-      if (!result.success) setError(result.error);
-    } else {
-      // Signup — pass confirmPassword for validation
-      const result = signup(
-        form.username,
-        form.email,
-        form.password,
-        form.role,
-        form.fullName,
-        form.confirmPassword,
-      );
-      if (!result.success) setError(result.error);
+    try {
+      if (mode === 'login') {
+        const result = await login(form.username, form.password, form.remember);
+        if (!result.success) setError(result.error);
+      } else {
+        // Signup — pass confirmPassword for validation; role is always 'user' (server-enforced)
+        const result = await signup(
+          form.username,
+          form.email,
+          form.password,
+          'user',
+          form.fullName,
+          form.confirmPassword,
+        );
+        if (!result.success) setError(result.error);
+      }
+    } catch (err) {
+      setError('Server unavailable. Please make sure the backend is running.');
     }
 
     setLoading(false);
@@ -60,7 +61,7 @@ export default function LoginPage() {
           <div className="login-hero-icon">
             <MapPin size={48} strokeWidth={1.5} />
           </div>
-          <h1>Sangli Roads GIS</h1>
+          <h1>Road QGIS</h1>
           <p className="login-hero-subtitle">Smart Road Infrastructure Management System</p>
           <div className="login-hero-features">
             <div className="login-feature">
@@ -79,8 +80,12 @@ export default function LoginPage() {
               <div className="login-feature-dot" />
               <span>Role-Based Access Control</span>
             </div>
+            <div className="login-feature">
+              <div className="login-feature-dot" />
+              <span>Scalable Dataset Upload</span>
+            </div>
           </div>
-          <p className="login-hero-footer">Sangli-Miraj-Kupwad Municipal Corporation</p>
+          <p className="login-hero-footer">Smart Road Infrastructure Portal</p>
         </div>
       </div>
 
@@ -203,24 +208,9 @@ export default function LoginPage() {
             )}
 
             {mode === 'signup' && (
-              <div className="form-group">
-                <label>Account Type</label>
-                <div className="role-select">
-                  <button
-                    type="button"
-                    className={`role-btn ${form.role === 'user' ? 'active' : ''}`}
-                    onClick={() => setForm(p => ({ ...p, role: 'user' }))}
-                  >
-                    <User size={16} /> Viewer
-                  </button>
-                  <button
-                    type="button"
-                    className={`role-btn ${form.role === 'admin' ? 'active' : ''}`}
-                    onClick={() => setForm(p => ({ ...p, role: 'admin' }))}
-                  >
-                    <Shield size={16} /> Admin
-                  </button>
-                </div>
+              <div className="signup-note">
+                <User size={14} />
+                <span>New accounts are created as <strong>Viewer</strong> role. Contact your Super Admin for elevated access.</span>
               </div>
             )}
 
@@ -253,7 +243,7 @@ export default function LoginPage() {
             {mode === 'login' && (
               <div className="login-hint">
                 <p>Demo credentials:</p>
-                <code>admin / admin123</code> or <code>user / user123</code>
+                <code>admin / admin123</code> · <code>user / user123</code> · <code>superadmin / super123</code>
               </div>
             )}
           </form>

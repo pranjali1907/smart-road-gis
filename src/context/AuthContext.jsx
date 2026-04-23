@@ -152,13 +152,16 @@ export function AuthProvider({ children }) {
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
   const isSuperAdmin = currentUser?.role === 'superadmin';
+  // 'user' role = restricted to Road Registry only (superadmin manages this via User Management)
+  const isRestrictedUser = currentUser?.role === 'user';
   const isAuthenticated = !!currentUser && !!getToken();
 
   const getRoleLabel = (role) => {
     switch (role) {
       case 'superadmin': return 'Super Admin';
       case 'admin': return 'Administrator';
-      default: return 'Viewer';
+      case 'user': return 'User';
+      default: return 'User';
     }
   };
 
@@ -167,6 +170,7 @@ export function AuthProvider({ children }) {
       currentUser,
       isAdmin,
       isSuperAdmin,
+      isRestrictedUser,
       isAuthenticated,
       loginActivity,
       authError,

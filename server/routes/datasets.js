@@ -1,8 +1,14 @@
 const express = require('express');
 const db = require('../db/connection');
 const { requireSuperAdmin } = require('../middleware/auth');
+const multer = require('multer');
+const fs = require('fs');
+const os = require('os');
+const Database = require('better-sqlite3');
+const wkx = require('wkx');
 
 const router = express.Router();
+const upload = multer({ dest: os.tmpdir() });
 
 // GET /api/datasets — list all datasets
 router.get('/', (req, res) => {
@@ -55,6 +61,74 @@ router.post('/', requireSuperAdmin, (req, res) => {
       isDefault: !!dataset.is_default,
     },
   });
+});
+
+// POST /api/datasets/parse-gpkg — upload and parse a .gpkg file to GeoJSON
+router.post('/parse-gpkg', requireSuperAdmin, upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  try {
+    const gpkg = new Database(req.file.path, { readonly: true });
+    
+    // Find the features table
+    const contents = gpkg.prepare("SELECT table_name FROM gpkg_contents WHERE data_type = 'features'").all();
+    if (contents.length === 0) {
+      throw new Error('No feature tables found in GeoPackage');
+    }
+    
+    const tableName = contents[0].table_name;
+    
+    // Find geometry column
+    const geomCols = gpkg.prepare("SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ?").get(tableName);
+    const geomCol = geomCols ? geomCols.column_name : 'geom';
+
+    const rows = gpkg.prepare(`SELECT * FROM "${tableName}"`).all();
+    
+    const features = [];
+    
+    for (const row of rows) {
+      const properties = { ...row };
+      let geometry = null;
+      
+      if (row[geomCol]) {
+        // Parse GPKG binary
+        const buffer = row[geomCol];
+        // Header starts with 'GP' (0x47, 0x50), then version (0x00)
+        if (buffer[0] === 0x47 && buffer[1] === 0x50) {
+          const flags = buffer[3];
+          // Determine header length based on envelope indicator in flags
+          const envInd = (flags >> 1) & 0x07;
+          let headerLen = 8;
+          if (envInd === 1) headerLen += 32;
+          else if (envInd === 2 || envInd === 3) headerLen += 48;
+          else if (envInd === 4) headerLen += 64;
+          
+          const wkbBuffer = buffer.slice(headerLen);
+          try {
+            geometry = wkx.Geometry.parse(wkbBuffer).toGeoJSON();
+          } catch(e) {
+             console.log("wkx parse error:", e.message);
+          }
+        }
+      }
+      delete properties[geomCol];
+      
+      features.push({
+        type: 'Feature',
+        properties,
+        geometry: geometry || { type: 'LineString', coordinates: [] }
+      });
+    }
+    
+    gpkg.close();
+    fs.unlinkSync(req.file.path);
+    
+    res.json({ type: 'FeatureCollection', features });
+    
+  } catch (err) {
+    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/datasets/:id/import — import roads into a dataset (super admin only)

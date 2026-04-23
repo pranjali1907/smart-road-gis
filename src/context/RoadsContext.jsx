@@ -6,7 +6,7 @@ import {
   fetchTrash as apiFetchTrash, restoreFromTrash as apiRestore,
   restoreAllFromTrash as apiRestoreAll, permanentDeleteFromTrash as apiPermDelete,
   emptyTrash as apiEmptyTrash, fetchHistory as apiFetchHistory,
-  isServerAvailable,
+  isServerAvailable, resetServerCache,
 } from '../api';
 import { ROAD_TYPE_NORMALIZE, DRAINAGE_NORMALIZE, SURFACE_NORMALIZE } from '../data/sampleRoads';
 
@@ -59,16 +59,23 @@ export function RoadsProvider({ children }) {
     setHistory(result.entries || []);
   }, [activeDatasetId]);
 
-  // Load trash
+  // Load trash — API returns 403 for non-superadmin, silently set empty
   const loadTrash = useCallback(async () => {
     if (!activeDatasetId) { setTrash([]); return; }
-    const data = await apiFetchTrash(activeDatasetId);
-    setTrash(data || []);
+    try {
+      const data = await apiFetchTrash(activeDatasetId);
+      setTrash(Array.isArray(data) ? data : []);
+    } catch {
+      setTrash([]);
+    }
   }, [activeDatasetId]);
 
-  // Check server on mount
+  // Check server on mount, then poll every 15 s
   useEffect(() => {
-    isServerAvailable().then(setServerOnline);
+    const check = () => { resetServerCache(); isServerAvailable().then(setServerOnline); };
+    check();
+    const interval = setInterval(check, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   // Reload everything when dataset changes

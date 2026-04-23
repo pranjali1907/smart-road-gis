@@ -13,6 +13,7 @@ const roadsRoutes = require('./routes/roads');
 const datasetsRoutes = require('./routes/datasets');
 const historyRoutes = require('./routes/history');
 const trashRoutes = require('./routes/trash');
+const imageryRoutes = require('./routes/imagery');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -25,11 +26,13 @@ app.use(cors({
   credentials: true,
 }));
 
-// Rate limiting
+// Rate limiting — generous for dev; imagery tiles are excluded entirely
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // generous limit for development
+  windowMs: 15 * 60 * 1000,
+  max: 2000,
   message: { error: 'Too many requests, please try again later' },
+  // Skip rate limiting for imagery tile requests — Leaflet fires many at once
+  skip: (req) => req.path.includes('/imagery/') && req.path.includes('/tile/'),
 });
 app.use('/api/', limiter);
 
@@ -54,6 +57,7 @@ app.use('/api/roads', roadsRoutes);
 app.use('/api/datasets', datasetsRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/trash', trashRoutes);
+app.use('/api/imagery', imageryRoutes);
 
 // ─── Health Check ───
 app.get('/api/health', (req, res) => {

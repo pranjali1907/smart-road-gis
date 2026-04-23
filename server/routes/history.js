@@ -1,6 +1,5 @@
 const express = require('express');
 const db = require('../db/connection');
-const ExcelJS = require('exceljs');
 
 const router = express.Router();
 

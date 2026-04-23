@@ -2,18 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRoads } from '../context/RoadsContext';
 import { useAuth } from '../context/AuthContext';
 import { useDatasets } from '../context/DatasetContext';
-import { fetchRoads } from '../api';
+import { fetchRoads, getRoadsExportUrl, getRoadsGpkgUrl } from '../api';
 import { ROAD_TYPE_COLORS, STATUS_COLORS, ROAD_TYPES, ROAD_STATUSES } from '../data/sampleRoads';
 import {
   Search, Filter, Plus, MapPin, ArrowUpDown,
-  Eye, Trash2, ChevronLeft, ChevronRight, AlertTriangle, X, RefreshCw
+  Eye, Trash2, ChevronLeft, ChevronRight, AlertTriangle, X, RefreshCw, Download
 } from 'lucide-react';
 
 const PAGE_SIZE = 15;
 
 export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
   const { deleteRoad } = useRoads();
-  const { isAdmin, currentUser } = useAuth();
+  const { isAdmin, isRestrictedUser } = useAuth();
   const { activeDatasetId } = useDatasets();
 
   // API State
@@ -122,10 +122,35 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
             </select>
           </div>
 
-          <button className="btn-primary" onClick={onAddRoad}>
-            <Plus size={16} /> Add Road
-          </button>
+          {activeDatasetId && (
+            <>
+              <button
+                className="btn-secondary"
+                onClick={() => window.open(getRoadsExportUrl(activeDatasetId), '_blank')}
+                title="Export full attribute table to Excel"
+              >
+                <Download size={15} />
+                Export Excel
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={() => window.open(getRoadsGpkgUrl(activeDatasetId), '_blank')}
+                title="Download as GeoPackage (.gpkg) for QGIS"
+                style={{ color: 'var(--success)' }}
+              >
+                <Download size={15} />
+                Export GPKG
+              </button>
+            </>
+          )}
+
+          {isAdmin && (
+            <button className="btn-primary" onClick={onAddRoad}>
+              <Plus size={16} /> Add Road
+            </button>
+          )}
         </div>
+
       </div>
 
       {/* Results summary */}
@@ -171,7 +196,11 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
           </thead>
           <tbody>
             {data.roads.map(road => (
-              <tr key={road.id} onClick={() => onSelectRoad(road.id)} className="registry-row">
+              <tr
+                key={road.id}
+                onClick={() => !isRestrictedUser && onSelectRoad(road.id)}
+                className={`registry-row ${isRestrictedUser ? 'viewer-row' : ''}`}
+              >
                 <td className="road-id">{road.srNo ?? '—'}</td>
                 <td className="road-name-cell">
                   <span className="road-name-text">{road.name || '—'}</span>
@@ -191,12 +220,16 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
                 <td className="zone-cell">{road.zone || '—'}</td>
                 <td>{road.wardNo || '—'}</td>
                 <td className="actions-cell" onClick={e => e.stopPropagation()}>
-                  <button className="action-btn" title="View on Map" onClick={() => onViewOnMap(road.id)}>
-                    <MapPin size={14} />
-                  </button>
-                  <button className="action-btn" title="View Details" onClick={() => onSelectRoad(road.id)}>
-                    <Eye size={14} />
-                  </button>
+                  {!isRestrictedUser && (
+                    <>
+                      <button className="action-btn" title="View on Map" onClick={() => onViewOnMap(road.id)}>
+                        <MapPin size={14} />
+                      </button>
+                      <button className="action-btn" title="View Details" onClick={() => onSelectRoad(road.id)}>
+                        <Eye size={14} />
+                      </button>
+                    </>
+                  )}
                   {isAdmin && (
                     <button
                       className="action-btn danger"
@@ -205,6 +238,9 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
                     >
                       <Trash2 size={14} />
                     </button>
+                  )}
+                  {isRestrictedUser && (
+                    <span className="viewer-read-only">Read Only</span>
                   )}
                 </td>
               </tr>

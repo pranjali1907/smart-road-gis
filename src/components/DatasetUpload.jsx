@@ -1,11 +1,11 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDatasets } from '../context/DatasetContext';
 import { useRoads } from '../context/RoadsContext';
 import { useAuth } from '../context/AuthContext';
-import { importRoadsToDataset } from '../api';
+import { importRoadsToDataset, uploadImagery, fetchImagery, deleteImagery } from '../api';
 import {
   Upload, FileUp, AlertTriangle, CheckCircle2, X, Database,
-  FileText, Layers, ArrowRight, RefreshCw, Plus, Trash2, Calendar, User
+  FileText, Layers, ArrowRight, RefreshCw, Plus, Trash2, Calendar, User, Image as ImageIcon, MapPin
 } from 'lucide-react';
 
 /* ─── Parse uploaded shapefile (.shp zip or individual files) ─── */
@@ -68,7 +68,22 @@ export default function DatasetUpload() {
   const [importMode, setImportMode] = useState('replace');
   const [success, setSuccess] = useState('');
   const [datasetName, setDatasetName] = useState('');
-  const [selectedExistingDataset, setSelectedExistingDataset] = useState(null); // null = create new
+  const [selectedExistingDataset, setSelectedExistingDataset] = useState(null);
+
+  // Imagery state
+  const imageryInputRef = useRef(null);
+  const [imageryList, setImageryList] = useState([]);
+  const [imageryFiles, setImageryFiles] = useState([]); // array of File objects
+
+  const [imageryUploading, setImageryUploading] = useState(false);
+  const [imageryError, setImageryError] = useState('');
+  const [imagerySuccess, setImagerySuccess] = useState('');
+
+  // Load imagery list on mount
+  useEffect(() => {
+    fetchImagery().then(setImageryList);
+  }, []);
+
 
   const handleFile = useCallback(async (file) => {
     setError('');
@@ -533,6 +548,182 @@ export default function DatasetUpload() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ═══ IMAGERY UPLOAD SECTION ════════════════════════════════════════ */}
+      <div className="imagery-upload-section">
+        <div className="imagery-upload-header">
+          <ImageIcon size={20} />
+          <div>
+            <h3>Upload Background Imagery</h3>
+            <p>Upload GeoTIFF (.tif) or ECW raster files to display as background layers on the map.</p>
+          </div>
+        </div>
+
+        {imageryError && (
+          <div className="upload-error animate-fade-in">
+            <AlertTriangle size={16} />
+            <span>{imageryError}</span>
+            <button className="btn-icon" onClick={() => setImageryError('')}><X size={13} /></button>
+          </div>
+        )}
+        {imagerySuccess && (
+          <div className="upload-success animate-fade-in">
+            <CheckCircle2 size={16} />
+            <span>{imagerySuccess}</span>
+            <button className="btn-icon" onClick={() => setImagerySuccess('')}><X size={13} /></button>
+          </div>
+        )}
+
+        <div className="imagery-upload-form">
+          {/* Drop zone — supports multi-select */}
+          <div
+            className="imagery-file-picker"
+            onClick={() => imageryInputRef.current?.click()}
+            style={{ cursor: 'pointer' }}
+          >
+            <input
+              ref={imageryInputRef}
+              type="file"
+              accept=".tif,.tiff,.ecw,.geotiff"
+              multiple
+              style={{ display: 'none' }}
+              onChange={e => {
+                const files = Array.from(e.target.files || []);
+                if (files.length) setImageryFiles(prev => {
+                  // Deduplicate by name
+                  const existing = new Set(prev.map(f => f.name));
+                  return [...prev, ...files.filter(f => !existing.has(f.name))];
+                });
+                // Reset input so same file can be re-added after removal
+                e.target.value = '';
+              }}
+            />
+            {imageryFiles.length === 0 ? (
+              <div className="imagery-file-placeholder">
+                <Upload size={22} />
+                <span>Click to select GeoTIFF or ECW files</span>
+                <span className="dropzone-hint">.tif / .tiff / .ecw — up to 20 files, 500 MB each</span>
+              </div>
+            ) : (
+              <div className="imagery-file-placeholder" style={{ padding: '0.6rem 1rem' }}>
+                <Upload size={16} />
+                <span style={{ fontSize: '0.8rem' }}>Click to add more files</span>
+              </div>
+            )}
+          </div>
+
+          {/* File list */}
+          {imageryFiles.length > 0 && (
+            <div className="imagery-file-list">
+              {imageryFiles.map((f, idx) => (
+                <div key={f.name} className="imagery-file-row">
+                  <ImageIcon size={13} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                  <span className="imagery-file-row-name">{f.name}</span>
+                  <span className="imagery-file-row-size">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+                  <span className={`imagery-file-row-type ${f.name.match(/\.ecw$/i) ? 'ecw' : ''}`}>
+                    {f.name.match(/\.ecw$/i) ? 'ECW' : 'TIFF'}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    onClick={e => { e.stopPropagation(); setImageryFiles(p => p.filter((_, i) => i !== idx)); }}
+                    title="Remove"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+              <div className="imagery-file-summary">
+                <strong>{imageryFiles.length}</strong> file{imageryFiles.length !== 1 ? 's' : ''} selected &nbsp;·&nbsp;
+                {(imageryFiles.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1)} MB total
+                <button
+                  type="button"
+                  className="btn-link"
+                  onClick={() => { setImageryFiles([]); if (imageryInputRef.current) imageryInputRef.current.value = ''; }}
+                >
+                  Clear all
+                </button>
+              </div>
+            </div>
+          )}
+
+          {imageryFiles.length > 0 && (
+            <button
+              type="button"
+              className="btn-primary"
+              style={{ marginTop: '0.75rem', width: '100%', justifyContent: 'center' }}
+              disabled={imageryUploading}
+              onClick={async () => {
+                setImageryUploading(true);
+                setImageryError('');
+                try {
+                  const fd = new FormData();
+                  imageryFiles.forEach(f => fd.append('imagery', f));
+                  const result = await uploadImagery(fd);
+                  if (result.success) {
+                    setImagerySuccess(
+                      result.count === 1
+                        ? `"${result.imagery[0].name}" uploaded successfully`
+                        : `${result.count} imagery files uploaded successfully`
+                    );
+                    setImageryFiles([]);
+                    if (imageryInputRef.current) imageryInputRef.current.value = '';
+                    const updated = await fetchImagery();
+                    setImageryList(updated);
+                  } else {
+                    setImageryError(result.error || 'Upload failed');
+                  }
+                } catch (err) {
+                  setImageryError(err.message);
+                }
+                setImageryUploading(false);
+              }}
+            >
+              {imageryUploading
+                ? <><RefreshCw size={15} className="spin-icon" /> Uploading {imageryFiles.length} file{imageryFiles.length !== 1 ? 's' : ''}...</>
+                : <><Upload size={15} /> Upload {imageryFiles.length} File{imageryFiles.length !== 1 ? 's' : ''}</>
+              }
+            </button>
+          )}
+        </div>
+
+        {/* Existing imagery list */}
+        {imageryList.length > 0 && (
+          <div className="existing-imagery-list">
+            <h4 style={{ margin: '1.25rem 0 0.625rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              <MapPin size={14} /> Uploaded Imagery Layers ({imageryList.length})
+            </h4>
+            {imageryList.map(img => (
+              <div key={img.id} className="existing-dataset-card">
+                <div className="dataset-card-info">
+                  <span className="dataset-card-name">
+                    <ImageIcon size={13} style={{ color: img.canRender ? 'var(--success)' : 'var(--text-muted)' }} />
+                    {img.name}
+                    <span style={{ fontSize: '0.68rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: img.canRender ? 'var(--success-light)' : 'var(--bg-alt)', color: img.canRender ? 'var(--success)' : 'var(--text-muted)', marginLeft: '0.4rem' }}>
+                      {img.fileType}
+                    </span>
+                  </span>
+                  <span className="dataset-card-meta">
+                    <span>{(img.fileSize / 1024 / 1024).toFixed(1)} MB · by {img.uploadedBy}</span>
+                    <span>{img.canRender ? '✓ Renders in map' : '⚠️ Open in QGIS'}</span>
+                  </span>
+                </div>
+                <button
+                  className="btn-icon danger-icon"
+                  title="Delete imagery"
+                  onClick={async () => {
+                    if (!confirm(`Delete "${img.name}"?`)) return;
+                    await deleteImagery(img.id);
+                    setImageryList(l => l.filter(x => x.id !== img.id));
+                  }}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

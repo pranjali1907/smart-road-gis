@@ -4,7 +4,7 @@ import { useRoads } from '../context/RoadsContext';
 import { useDatasets } from '../context/DatasetContext';
 import {
   LayoutDashboard, Map, ListOrdered, History, LogOut, ChevronLeft, ChevronRight,
-  Menu, Bell, Search, User, MapPin, Settings, Upload, Trash2, Database, ChevronDown
+  Menu, Bell, Search, MapPin, Upload, Trash2, Database, ChevronDown, Users
 } from 'lucide-react';
 import Dashboard from './Dashboard';
 import MapView from './MapView';
@@ -14,23 +14,21 @@ import EditHistory from './EditHistory';
 import AddRoadModal from './AddRoadModal';
 import DatasetUpload from './DatasetUpload';
 import TrashView from './TrashView';
+import UserManagement from './UserManagement';
 
-const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'map', label: 'Map View', icon: Map },
-  { id: 'registry', label: 'Road Registry', icon: ListOrdered },
-  { id: 'history', label: 'Edit History', icon: History },
-];
-
-const SUPER_ADMIN_NAV = [
-  { id: 'upload', label: 'Upload Dataset', icon: Upload },
-];
+// ─── Role-based access matrix ───────────────────────────────────────────────
+// superadmin : Dashboard, Map, Registry, Audit Log, Trash, Upload, User Mgmt
+// admin      : Dashboard, Map, Registry, Audit Log, Upload   (NO Trash)
+// user       : Road Registry ONLY  (superadmin controls via User Management)
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function Layout() {
-  const { currentUser, isAdmin, isSuperAdmin, logout, getRoleLabel } = useAuth();
+  const { currentUser, isAdmin, isSuperAdmin, isRestrictedUser, logout, getRoleLabel } = useAuth();
   const { trash, serverOnline } = useRoads();
   const { datasets, activeDataset, activeDatasetId, switchDataset } = useDatasets();
-  const [activeView, setActiveView] = useState('dashboard');
+
+  // 'user' (restricted) starts at map-only view
+  const [activeView, setActiveView] = useState(isRestrictedUser ? 'map' : 'dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedRoadId, setSelectedRoadId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -38,27 +36,55 @@ export default function Layout() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showDatasetPicker, setShowDatasetPicker] = useState(false);
 
-  const handleSelectRoad = (roadId) => {
-    setSelectedRoadId(roadId);
-  };
+  const handleSelectRoad = (roadId) => { setSelectedRoadId(roadId); };
+  const handleCloseDetail = () => { setSelectedRoadId(null); };
+  const handleViewOnMap = (roadId) => { setSelectedRoadId(roadId); setActiveView('map'); };
 
-  const handleCloseDetail = () => {
-    setSelectedRoadId(null);
-  };
+  // ─── Build nav per role ───
+  let navItems = [];
 
-  const handleViewOnMap = (roadId) => {
-    setSelectedRoadId(roadId);
-    setActiveView('map');
-  };
+  if (isRestrictedUser) {
+    // 'user' role: Map View only — read-only, no attribute table, no editing
+    navItems = [
+      { id: 'map', label: 'Map View', icon: Map },
+    ];
+  } else {
+    // admin & superadmin share base nav
+    navItems = [
+      { id: 'dashboard', label: 'Dashboard',    icon: LayoutDashboard },
+      { id: 'map',       label: 'Map View',      icon: Map },
+      { id: 'registry',  label: 'Road Registry', icon: ListOrdered },
+      { id: 'history',   label: 'Audit Log',     icon: History },
+    ];
 
-  // Combine nav items based on role
-  const adminNav = isAdmin
-    ? [{ id: 'trash', label: 'Trash', icon: Trash2, badge: trash.length || null }]
-    : [];
-  const superNav = isSuperAdmin ? SUPER_ADMIN_NAV : [];
-  const navItems = [...NAV_ITEMS, ...adminNav, ...superNav];
+    // Trash — SuperAdmin only
+    if (isSuperAdmin) {
+      navItems.push({ id: 'trash', label: 'Trash', icon: Trash2, badge: trash.length || null });
+    }
 
+    // Upload Dataset — admin & superadmin
+    if (isAdmin) {
+      navItems.push({ id: 'upload', label: 'Upload Dataset', icon: Upload });
+    }
+
+    // User Management — SuperAdmin only
+    if (isSuperAdmin) {
+      navItems.push({ id: 'users', label: 'User Management', icon: Users });
+    }
+  }
+
+  // ─── Render content per role ───
   const renderContent = () => {
+    // 'user' role is strictly locked to Map View — no registry, no editing, no detail panel
+    if (isRestrictedUser) {
+      return (
+        <MapView
+          selectedRoadId={null}
+          onSelectRoad={() => {}}  // no detail panel for restricted users
+        />
+      );
+    }
+
     switch (activeView) {
       case 'dashboard':
         return <Dashboard onViewOnMap={handleViewOnMap} />;
@@ -80,16 +106,21 @@ export default function Layout() {
       case 'history':
         return <EditHistory />;
       case 'trash':
-        return isAdmin ? <TrashView /> : <Dashboard onViewOnMap={handleViewOnMap} />;
+        // Trash is gated to superadmin only
+        return isSuperAdmin ? <TrashView /> : <Dashboard onViewOnMap={handleViewOnMap} />;
       case 'upload':
-        return isSuperAdmin ? <DatasetUpload /> : <Dashboard onViewOnMap={handleViewOnMap} />;
+        return isAdmin ? <DatasetUpload /> : <Dashboard onViewOnMap={handleViewOnMap} />;
+      case 'users':
+        return isSuperAdmin ? <UserManagement /> : <Dashboard onViewOnMap={handleViewOnMap} />;
       default:
         return <Dashboard onViewOnMap={handleViewOnMap} />;
     }
   };
 
   const roleLabel = getRoleLabel(currentUser?.role);
-  const roleClass = currentUser?.role === 'superadmin' ? 'superadmin' : (isAdmin ? 'admin' : 'viewer');
+  const roleClass =
+    currentUser?.role === 'superadmin' ? 'superadmin' :
+    currentUser?.role === 'admin'      ? 'admin' : 'user';
 
   return (
     <div className="app-layout">
@@ -97,9 +128,7 @@ export default function Layout() {
       <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${showMobileNav ? 'mobile-open' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-brand">
-            <div className="brand-icon">
-              <MapPin size={22} />
-            </div>
+            <div className="brand-icon"><MapPin size={22} /></div>
             {!sidebarCollapsed && (
               <div className="brand-text">
                 <span className="brand-name">Road QGIS</span>
@@ -126,12 +155,8 @@ export default function Layout() {
             >
               <item.icon size={20} />
               {!sidebarCollapsed && <span>{item.label}</span>}
-              {item.badge && !sidebarCollapsed && (
-                <span className="nav-badge">{item.badge}</span>
-              )}
-              {item.badge && sidebarCollapsed && (
-                <span className="nav-badge-dot" />
-              )}
+              {item.badge && !sidebarCollapsed && <span className="nav-badge">{item.badge}</span>}
+              {item.badge && sidebarCollapsed && <span className="nav-badge-dot" />}
               {activeView === item.id && <div className="nav-indicator" />}
             </button>
           ))}
@@ -151,9 +176,7 @@ export default function Layout() {
             {!sidebarCollapsed && (
               <div className="user-info">
                 <span className="user-name">{currentUser?.fullName}</span>
-                <span className={`user-role ${roleClass}`}>
-                  {roleLabel}
-                </span>
+                <span className={`user-role ${roleClass}`}>{roleLabel}</span>
               </div>
             )}
           </div>
@@ -171,68 +194,67 @@ export default function Layout() {
 
       {/* Main content */}
       <main className="main-content">
-        {/* Topbar */}
         <header className="topbar">
           <div className="topbar-left">
             <button className="mobile-menu-btn" onClick={() => setShowMobileNav(v => !v)}>
               <Menu size={20} />
             </button>
             <h1 className="topbar-title">
-              {navItems.find(n => n.id === activeView)?.label || 'Dashboard'}
+              {navItems.find(n => n.id === activeView)?.label || (isRestrictedUser ? 'Road Registry' : 'Dashboard')}
             </h1>
           </div>
           <div className="topbar-right">
-            {/* Dataset Selector */}
-            <div className="dataset-selector-wrapper">
-              <button
-                className="dataset-selector-btn"
-                onClick={() => setShowDatasetPicker(v => !v)}
-                title="Switch Dataset"
-              >
-                <Database size={15} />
-                <span className="dataset-selector-name">
-                  {activeDataset?.name || 'No Dataset'}
-                </span>
-                <ChevronDown size={14} className={showDatasetPicker ? 'rotate-180' : ''} />
-              </button>
-              {showDatasetPicker && (
-                <>
-                  <div className="dropdown-overlay" onClick={() => setShowDatasetPicker(false)} />
-                  <div className="dataset-dropdown animate-fade-in">
-                    <div className="dataset-dropdown-header">
-                      <span className="dataset-dropdown-title">Select Dataset</span>
-                      <span className="dataset-dropdown-count">{datasets.length} available</span>
+            {/* Dataset Selector — hide for restricted users */}
+            {!isRestrictedUser && (
+              <div className="dataset-selector-wrapper">
+                <button
+                  className="dataset-selector-btn"
+                  onClick={() => setShowDatasetPicker(v => !v)}
+                  title="Switch Dataset"
+                >
+                  <Database size={15} />
+                  <span className="dataset-selector-name">
+                    {activeDataset?.name || 'No Dataset'}
+                  </span>
+                  <ChevronDown size={14} className={showDatasetPicker ? 'rotate-180' : ''} />
+                </button>
+                {showDatasetPicker && (
+                  <>
+                    <div className="dropdown-overlay" onClick={() => setShowDatasetPicker(false)} />
+                    <div className="dataset-dropdown animate-fade-in">
+                      <div className="dataset-dropdown-header">
+                        <span className="dataset-dropdown-title">Select Dataset</span>
+                        <span className="dataset-dropdown-count">{datasets.length} available</span>
+                      </div>
+                      <div className="dataset-dropdown-list">
+                        {datasets.length === 0 ? (
+                          <div className="dataset-dropdown-empty">
+                            No datasets available. Upload a dataset first.
+                          </div>
+                        ) : (
+                          datasets.map(ds => (
+                            <button
+                              key={ds.id}
+                              className={`dataset-dropdown-item ${ds.id === activeDatasetId ? 'active' : ''}`}
+                              onClick={() => { switchDataset(ds.id); setShowDatasetPicker(false); }}
+                            >
+                              <div className="dataset-item-info">
+                                <span className="dataset-item-name">{ds.name}</span>
+                                <span className="dataset-item-meta">
+                                  {ds.roadCount} roads · by {ds.uploadedBy}
+                                  {ds.isDefault && ' · Default'}
+                                </span>
+                              </div>
+                              {ds.id === activeDatasetId && <span className="dataset-item-active">✓</span>}
+                            </button>
+                          ))
+                        )}
+                      </div>
                     </div>
-                    <div className="dataset-dropdown-list">
-                      {datasets.length === 0 ? (
-                        <div className="dataset-dropdown-empty">
-                          No datasets available. Super Admin needs to upload data.
-                        </div>
-                      ) : (
-                        datasets.map(ds => (
-                          <button
-                            key={ds.id}
-                            className={`dataset-dropdown-item ${ds.id === activeDatasetId ? 'active' : ''}`}
-                            onClick={() => { switchDataset(ds.id); setShowDatasetPicker(false); }}
-                          >
-                            <div className="dataset-item-info">
-                              <span className="dataset-item-name">{ds.name}</span>
-                              <span className="dataset-item-meta">
-                                {ds.roadCount} roads · by {ds.uploadedBy}
-                                {ds.isDefault && ' · Default'}
-                              </span>
-                            </div>
-                            {ds.id === activeDatasetId && (
-                              <span className="dataset-item-active">✓</span>
-                            )}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="topbar-search">
               <Search size={16} />
@@ -269,11 +291,14 @@ export default function Layout() {
         </header>
 
         {/* No dataset warning */}
-        {!activeDatasetId && (
+        {!isRestrictedUser && !activeDatasetId && (
           <div className="no-dataset-banner">
             <Database size={18} />
-            <span>No dataset selected. {isSuperAdmin ? 'Upload a dataset to get started.' : 'Ask your Super Admin to upload a dataset.'}</span>
-            {isSuperAdmin && (
+            <span>
+              No dataset selected.{' '}
+              {isSuperAdmin ? 'Upload a dataset to get started.' : 'Ask your Super Admin to upload a dataset.'}
+            </span>
+            {isAdmin && (
               <button className="btn-primary btn-sm" onClick={() => setActiveView('upload')}>
                 <Upload size={14} /> Upload Dataset
               </button>
@@ -281,19 +306,16 @@ export default function Layout() {
           </div>
         )}
 
-        {/* Content */}
-        <div className="content-area">
-          {renderContent()}
-        </div>
+        <div className="content-area">{renderContent()}</div>
       </main>
 
-      {/* Road detail panel */}
-      {selectedRoadId && (
+      {/* Road detail panel — not for restricted users */}
+      {selectedRoadId && !isRestrictedUser && (
         <RoadDetail roadId={selectedRoadId} onClose={handleCloseDetail} />
       )}
 
-      {/* Add road modal */}
-      {showAddModal && (
+      {/* Add road modal — not for restricted users */}
+      {showAddModal && !isRestrictedUser && (
         <AddRoadModal onClose={() => setShowAddModal(false)} />
       )}
     </div>

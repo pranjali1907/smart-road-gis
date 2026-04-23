@@ -33,16 +33,16 @@ function rowToRoad(row) {
   };
 }
 
-// GET /api/trash?datasetId=...
-router.get('/', (req, res) => {
+// GET /api/trash?datasetId=... (SuperAdmin only)
+router.get('/', requireSuperAdmin, (req, res) => {
   const { datasetId } = req.query;
   if (!datasetId) return res.status(400).json({ error: 'datasetId is required' });
   const rows = db.prepare('SELECT * FROM trash WHERE dataset_id = ? ORDER BY deleted_at DESC').all(parseInt(datasetId));
   res.json(rows.map(rowToRoad));
 });
 
-// POST /api/trash/restore/:datasetId/:id — restore from trash
-router.post('/restore/:datasetId/:id', requireAdmin, (req, res) => {
+// POST /api/trash/restore/:datasetId/:id — restore from trash (SuperAdmin only)
+router.post('/restore/:datasetId/:id', requireSuperAdmin, (req, res) => {
   const datasetId = parseInt(req.params.datasetId);
   const { id } = req.params;
 
@@ -74,8 +74,8 @@ router.post('/restore/:datasetId/:id', requireAdmin, (req, res) => {
   res.json({ success: true, road: rowToRoad(trashed) });
 });
 
-// POST /api/trash/restore-all/:datasetId
-router.post('/restore-all/:datasetId', requireAdmin, (req, res) => {
+// POST /api/trash/restore-all/:datasetId (SuperAdmin only)
+router.post('/restore-all/:datasetId', requireSuperAdmin, (req, res) => {
   const datasetId = parseInt(req.params.datasetId);
   const trashList = db.prepare('SELECT * FROM trash WHERE dataset_id = ?').all(datasetId);
 

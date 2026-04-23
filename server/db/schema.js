@@ -113,6 +113,32 @@ function initSchema() {
   `);
 
   console.log('  ✓ Database schema initialized');
+
+  // ── Always upsert the superadmin from environment variables ──────────────
+  // This runs on EVERY server start so that changing .env + restarting
+  // is all that's needed to rotate credentials for a new deployment.
+  const SA_USERNAME  = process.env.SUPERADMIN_USERNAME  || 'superadmin';
+  const SA_EMAIL     = process.env.SUPERADMIN_EMAIL     || 'super@smartroad.gov';
+  const SA_PASSWORD  = process.env.SUPERADMIN_PASSWORD  || 'super123';
+  const SA_FULLNAME  = process.env.SUPERADMIN_FULLNAME  || 'Super Administrator';
+
+  const existing = db.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('superadmin');
+  const hashed = bcrypt.hashSync(SA_PASSWORD, 12);
+
+  if (existing) {
+    // Update credentials of the existing superadmin
+    db.prepare(`
+      UPDATE users SET username=?, email=?, password=?, full_name=? WHERE id=?
+    `).run(SA_USERNAME, SA_EMAIL, hashed, SA_FULLNAME, existing.id);
+    console.log(`  ✓ Superadmin synced from .env (username: ${SA_USERNAME})`);
+  } else {
+    // First-ever start — create the superadmin
+    db.prepare(`
+      INSERT INTO users (username, email, password, role, full_name)
+      VALUES (?, ?, ?, 'superadmin', ?)
+    `).run(SA_USERNAME, SA_EMAIL, hashed, SA_FULLNAME);
+    console.log(`  ✓ Superadmin created from .env (username: ${SA_USERNAME})`);
+  }
 }
 
 function migrateExistingData() {
@@ -178,7 +204,7 @@ function migrateExistingData() {
             id: props.id || props.ID || props.fid || `ROAD-${String(i+1).padStart(4, '0')}`,
             srNo: props.srNo || props['sr.no'] || props.sr_no || props.SR_NO || i + 1,
             fid: props.fid || props.FID || i + 1,
-            name: props.name || props.NAME || props.road_name || '',
+            name: (props.name || props.NAME || props.road_name || '').trim() || `Road in ${props.zone || props.ZONE || 'Unknown'}${props.wardNo || props.ward || props.WARD ? ' Ward ' + (props.wardNo || props.ward || props.WARD) : ''} (#${props.srNo || props['sr.no'] || props.sr_no || props.SR_NO || i + 1})`,
             fromChainage: parseFloat(props.from_ch || props.FROM_CH || props.fromChainage || 0) || 0,
             toChainage: parseFloat(props.to_ch || props.TO_CH || props.toChainage || 0) || 0,
             length: parseFloat(props.length || props.LENGTH || 0) || 0,

@@ -243,7 +243,10 @@ export default function LoginPage() {
             {mode === 'login' && (
               <div className="login-hint">
                 <p>Demo credentials:</p>
-                <code>admin / admin123</code> · <code>user / user123</code> · <code>superadmin / super123</code>
+                <code>superadmin / super123</code> · <code>admin / admin123</code> · <code>user / user123</code>
+                <p style={{ marginTop: '0.4rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  superadmin = full access &amp; Trash · admin = no Trash · user = Map View only
+                </p>
               </div>
             )}
           </form>

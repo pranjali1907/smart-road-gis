@@ -3,7 +3,8 @@
  * All requests include JWT token for authentication.
  */
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = '/api';
+
 
 /* ─── Token Management ─── */
 
@@ -55,16 +56,24 @@ async function apiFetch(path, options = {}) {
 /* ─── Health Check ─── */
 
 let _serverAvailable = null;
+let _serverCacheTimer = null;
+
+export function resetServerCache() {
+  _serverAvailable = null;
+  if (_serverCacheTimer) { clearTimeout(_serverCacheTimer); _serverCacheTimer = null; }
+}
 
 export async function isServerAvailable() {
   if (_serverAvailable !== null) return _serverAvailable;
   try {
-    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(2000) });
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
     _serverAvailable = res.ok;
   } catch {
     _serverAvailable = false;
   }
-  setTimeout(() => { _serverAvailable = null; }, 30000);
+  if (_serverCacheTimer) clearTimeout(_serverCacheTimer);
+  // Re-check every 15 s so status badge stays accurate
+  _serverCacheTimer = setTimeout(() => { _serverAvailable = null; }, 15000);
   return _serverAvailable;
 }
 
@@ -123,6 +132,21 @@ export async function createDataset(name, description = '') {
     body: JSON.stringify({ name, description }),
   });
   return await res.json();
+}
+
+export async function parseGpkgFile(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  const res = await fetch(`${API_BASE}/datasets/parse-gpkg`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body: formData,
+  });
+  
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to parse GPKG file');
+  return data;
 }
 
 export async function deleteDataset(id) {
@@ -230,7 +254,14 @@ export async function pushHistoryEntry(entry) {
 
 export function getHistoryExportUrl(datasetId) {
   const token = getToken();
-  return `${API_BASE}/history/export?datasetId=${datasetId}&token=${token}`;
+  const base = `${API_BASE}/history/export`;
+  const params = `token=${token}${datasetId ? `&datasetId=${datasetId}` : ''}`;
+  return `${base}?${params}`;
+}
+
+export function getRoadsExportUrl(datasetId) {
+  const token = getToken();
+  return `${API_BASE}/roads/export?datasetId=${datasetId}&token=${token}`;
 }
 
 /* ─── TRASH ─── */
@@ -238,6 +269,7 @@ export function getHistoryExportUrl(datasetId) {
 export async function fetchTrash(datasetId) {
   try {
     const res = await apiFetch(`/trash?datasetId=${datasetId}`);
+    if (res.status === 403 || res.status === 401) return []; // not superadmin
     if (!res.ok) return [];
     return await res.json();
   } catch {
@@ -263,4 +295,70 @@ export async function permanentDeleteFromTrash(datasetId, id) {
 export async function emptyTrash(datasetId) {
   const res = await apiFetch(`/trash/${datasetId}`, { method: 'DELETE' });
   return await res.json();
+}
+
+/* ─── USER MANAGEMENT (Superadmin) ─── */
+
+export async function fetchAllUsers() {
+  try {
+    const res = await apiFetch('/users');
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function updateUserRole(userId, role) {
+  const res = await apiFetch(`/users/${userId}/role`, {
+    method: 'PUT',
+    body: JSON.stringify({ role }),
+  });
+  return await res.json();
+}
+
+/* ─── GPKG EXPORT ─── */
+
+/** Returns the authenticated download URL for GPKG export */
+export function getRoadsGpkgUrl(datasetId) {
+  return `${API_BASE}/roads/export-gpkg?datasetId=${datasetId}&token=${getToken()}`;
+}
+
+/* ─── IMAGERY ─── */
+
+export async function fetchImagery() {
+  try {
+    const res = await apiFetch('/imagery');
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function uploadImagery(formData) {
+  const res = await fetch(`${API_BASE}/imagery`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body: formData, // multipart — do NOT set Content-Type manually
+  });
+  return await res.json();
+}
+
+export async function deleteImagery(id) {
+  const res = await apiFetch(`/imagery/${id}`, { method: 'DELETE' });
+  return await res.json();
+}
+
+export async function updateImageryMeta(id, patch) {
+  const res = await apiFetch(`/imagery/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+  return await res.json();
+}
+
+/** Returns the URL to stream the imagery file — includes token as query param */
+export function getImageryFileUrl(id) {
+  return `${API_BASE}/imagery/${id}/file?token=${getToken()}`;
 }

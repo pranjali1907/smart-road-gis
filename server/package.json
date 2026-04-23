@@ -1,3 +1,9 @@
 {
-  "type": "commonjs"
+  "type": "commonjs",
+  "dependencies": {
+    "epsg-index": "^2.0.0",
+    "geotiff": "^3.0.5",
+    "pngjs": "^7.0.0",
+    "proj4": "^2.20.8"
+  }
 }

@@ -1,15 +1,22 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { useAuth } from './AuthContext';
 import { fetchDatasets, createDataset as apiCreateDataset, deleteDataset as apiDeleteDataset, setDefaultDataset as apiSetDefault } from '../api';
 
 const DatasetContext = createContext(null);
 
 export function DatasetProvider({ children }) {
+  const { isAuthenticated } = useAuth();
   const [datasets, setDatasets] = useState([]);
   const [activeDatasetId, setActiveDatasetId] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Load datasets on mount
+  // Load datasets — only when the user is authenticated (token exists)
   const loadDatasets = useCallback(async () => {
+    if (!isAuthenticated) {
+      setDatasets([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const list = await fetchDatasets();
     setDatasets(list);
@@ -24,7 +31,7 @@ export function DatasetProvider({ children }) {
       else if (list.length > 0) setActiveDatasetId(list[0].id);
     }
     setLoading(false);
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     loadDatasets();

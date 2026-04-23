@@ -67,8 +67,47 @@ router.post('/signup', validate(signupSchema), (req, res) => {
 
 // GET /api/users — list all users (admin only, no passwords)
 router.get('/', (req, res) => {
-  const users = db.prepare('SELECT id, username, email, role, full_name, created_at FROM users').all();
-  res.json(users.map(u => ({ ...u, fullName: u.full_name, createdAt: u.created_at })));
+  const users = db.prepare('SELECT id, username, email, role, full_name, created_at FROM users ORDER BY created_at DESC').all();
+  res.json(users.map(u => ({ id: u.id, username: u.username, email: u.email, role: u.role, fullName: u.full_name, createdAt: u.created_at })));
+});
+
+// PUT /api/users/:id/role — change a user's role (superadmin only)
+router.put('/:id/role', (req, res) => {
+  if (!req.user || req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Super Admin access required' });
+  }
+
+  const userId = parseInt(req.params.id);
+  const { role } = req.body;
+  const allowedRoles = ['user', 'admin', 'superadmin'];
+
+  if (!allowedRoles.includes(role)) {
+    return res.status(400).json({ error: `Invalid role. Allowed: ${allowedRoles.join(', ')}` });
+  }
+
+  // Can't change your own role (prevents self-lockout)
+  if (userId === req.user.id) {
+    return res.status(403).json({ error: 'You cannot change your own role' });
+  }
+
+  const target = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(userId);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+
+  // If demoting a superadmin, ensure at least one superadmin remains
+  if (target.role === 'superadmin' && role !== 'superadmin') {
+    const saCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE role='superadmin'").get().c;
+    if (saCount <= 1) {
+      return res.status(403).json({ error: 'Cannot demote the last Super Admin — at least one must exist' });
+    }
+  }
+
+  db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, userId);
+
+  db.prepare('INSERT INTO activity (user_id, username, action) VALUES (?, ?, ?)')
+    .run(req.user.id, req.user.username, `role_change:${target.username}:${target.role}->${role}`);
+
+  const updated = db.prepare('SELECT id, username, email, role, full_name, created_at FROM users WHERE id = ?').get(userId);
+  res.json({ success: true, user: { id: updated.id, username: updated.username, email: updated.email, role: updated.role, fullName: updated.full_name } });
 });
 
 // GET /api/activity — activity log
@@ -87,6 +126,65 @@ router.post('/activity', (req, res) => {
   const { userId, username, action } = req.body;
   db.prepare('INSERT INTO activity (user_id, username, action) VALUES (?, ?, ?)').run(userId || 0, username || '', action || '');
   res.json({ success: true });
+});
+
+// PUT /api/users/me/password — change own password (any authenticated user)
+router.put('/me/password', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'currentPassword and newPassword are required' });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  }
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const valid = await bcrypt.compare(currentPassword, user.password);
+  if (!valid) return res.status(403).json({ error: 'Current password is incorrect' });
+
+  const hashed = await bcrypt.hash(newPassword, 12);
+  db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, req.user.id);
+  db.prepare('INSERT INTO activity (user_id, username, action) VALUES (?, ?, ?)')
+    .run(req.user.id, req.user.username, 'password_change');
+
+  res.json({ success: true, message: 'Password updated successfully' });
+});
+
+// PUT /api/users/me/profile — update own profile (username, email, fullName)
+router.put('/me/profile', async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+  const { username, email, fullName } = req.body;
+
+  // Check uniqueness
+  if (username) {
+    const clash = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(username, req.user.id);
+    if (clash) return res.status(409).json({ error: 'Username already taken' });
+  }
+  if (email) {
+    const clash = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(email, req.user.id);
+    if (clash) return res.status(409).json({ error: 'Email already in use' });
+  }
+
+  db.prepare(`
+    UPDATE users SET
+      username = COALESCE(NULLIF(?, ''), username),
+      email = COALESCE(NULLIF(?, ''), email),
+      full_name = COALESCE(NULLIF(?, ''), full_name)
+    WHERE id = ?
+  `).run(username || '', email || '', fullName || '', req.user.id);
+
+  const updated = db.prepare('SELECT id, username, email, role, full_name FROM users WHERE id = ?').get(req.user.id);
+  const { generateToken } = require('../middleware/auth');
+  const newToken = generateToken(updated);
+
+  db.prepare('INSERT INTO activity (user_id, username, action) VALUES (?, ?, ?)')
+    .run(req.user.id, updated.username, 'profile_update');
+
+  res.json({ success: true, token: newToken, user: { id: updated.id, username: updated.username, email: updated.email, role: updated.role, fullName: updated.full_name } });
 });
 
 module.exports = router;

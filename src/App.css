@@ -3833,7 +3833,7 @@
 }
 
 
-/* Viewer-restricted table rows — no pointer, no hover indicator */
+/* Viewer-restricted table rows ï¿½ no pointer, no hover indicator */
 .viewer-row {
   cursor: default !important;
 }
@@ -3853,7 +3853,7 @@
   white-space: nowrap;
 }
 
-/* ===== ADD ROAD MODAL — DRAW STEP ===== */
+/* ===== ADD ROAD MODAL ï¿½ DRAW STEP ===== */
 .modal-wide {
   max-width: 860px !important;
 }
@@ -4068,7 +4068,7 @@
   flex-shrink: 0;
 }
 
-/* ===== ADD ROAD MODAL — TAB LAYOUT ===== */
+/* ===== ADD ROAD MODAL ï¿½ TAB LAYOUT ===== */
 .add-road-modal {
   position: fixed;
   top: 50%;

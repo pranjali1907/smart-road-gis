@@ -210,7 +210,7 @@ export default function LoginPage() {
             {mode === 'signup' && (
               <div className="signup-note">
                 <User size={14} />
-                <span>New accounts are created as <strong>Viewer</strong> role. Contact your Super Admin for elevated access.</span>
+                <span>New accounts are created as <strong>User</strong> role. Contact your Super Admin for elevated access.</span>
               </div>
             )}
 
@@ -243,10 +243,7 @@ export default function LoginPage() {
             {mode === 'login' && (
               <div className="login-hint">
                 <p>Demo credentials:</p>
-                <code>superadmin / super123</code> · <code>admin / admin123</code> · <code>user / user123</code>
-                <p style={{ marginTop: '0.4rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  superadmin = full access &amp; Trash · admin = no Trash · user = Map View only
-                </p>
+                <code>superadmin / super123</code>
               </div>
             )}
           </form>

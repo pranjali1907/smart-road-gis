@@ -1,5 +1,7 @@
 const express = require('express');
 const db = require('../db/connection');
+const ExcelJS = require('exceljs');
+const { requireSuperAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -55,7 +57,7 @@ router.post('/', (req, res) => {
 });
 
 // GET /api/history/export — export history as Excel file
-router.get('/export', async (req, res) => {
+router.get('/export', requireSuperAdmin, async (req, res) => {
   const { datasetId } = req.query;
 
   let where = [];

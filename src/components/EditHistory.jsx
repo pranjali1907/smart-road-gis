@@ -2,12 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { fetchHistory } from '../api';
 import {
   History, User, Calendar, FileEdit, ArrowUpRight,
-  Search, RefreshCw, ChevronLeft, ChevronRight, Globe
+  Search, RefreshCw, ChevronLeft, ChevronRight, Globe, Download
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { getToken } from '../api';
 
 const PAGE_SIZE = 25;
 
 export default function EditHistory() {
+  const { isSuperAdmin } = useAuth();
   // API State
   const [data, setData] = useState({ entries: [], total: 0, totalPages: 1 });
   const [loading, setLoading] = useState(false);
@@ -72,6 +75,20 @@ export default function EditHistory() {
         <div className="history-stats">
           <span>Total entries: <strong>{data.total}</strong></span>
           {loading && <RefreshCw size={14} className="spin-icon" style={{ marginLeft: 8 }} />}
+          {isSuperAdmin && (
+            <button
+              className="btn btn-outline"
+              style={{ marginLeft: 16, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+              onClick={() => {
+                const token = getToken();
+                window.location.href = `/api/history/export?token=${token}`;
+              }}
+              title="Download Excel Export (SuperAdmin Only)"
+            >
+              <Download size={16} />
+              Export
+            </button>
+          )}
         </div>
       </div>
 

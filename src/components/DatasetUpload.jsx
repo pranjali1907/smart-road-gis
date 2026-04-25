@@ -93,16 +93,11 @@ export default function DatasetUpload() {
     if (!file) return;
 
     const name = file.name.toLowerCase();
-    const validExts = ['.zip', '.shp', '.geojson', '.json'];
+    const validExts = ['.zip', '.shp', '.geojson', '.json', '.gpkg'];
     const ext = '.' + name.split('.').pop();
 
-    if (name.endsWith('.gpkg')) {
-      setError('GPKG files are not supported for direct browser upload. Please convert your .gpkg file to .shp (shapefile) or .geojson format using QGIS (Layer → Export → Save Features As) and upload the resulting file.');
-      return;
-    }
-
     if (!validExts.includes(ext)) {
-      setError(`Unsupported file format "${ext}". Please upload a .zip (zipped shapefile), .shp, or .geojson file.`);
+      setError(`Unsupported file format "${ext}". Please upload a .zip, .shp, .geojson, or .gpkg file.`);
       return;
     }
 
@@ -121,6 +116,10 @@ export default function DatasetUpload() {
         } else {
           throw new Error('Invalid GeoJSON: expected FeatureCollection or Feature');
         }
+      } else if (ext === '.gpkg') {
+        const { parseGpkgFile } = await import('../api');
+        const result = await parseGpkgFile(file);
+        features = result.features;
       } else {
         features = await parseShapefile(file);
       }
@@ -332,10 +331,7 @@ export default function DatasetUpload() {
                 <FileUp size={40} />
                 <p className="dropzone-title">Drop your file here, or click to browse</p>
                 <span className="dropzone-hint">
-                  Supports: <strong>.zip</strong> (zipped shapefile), <strong>.shp</strong>, <strong>.geojson</strong>
-                </span>
-                <span className="dropzone-hint-note">
-                  For .gpkg files, please convert to .shp or .geojson using QGIS first
+                  Supports: <strong>.zip</strong>, <strong>.shp</strong>, <strong>.geojson</strong>, <strong>.gpkg</strong>
                 </span>
               </>
             )}
@@ -540,11 +536,11 @@ export default function DatasetUpload() {
               <span>Standard GeoJSON FeatureCollection with road geometries and attributes.</span>
             </div>
           </div>
-          <div className="format-card disabled">
+          <div className="format-card">
             <div className="format-icon gpkg">GPK</div>
             <div>
               <strong>GeoPackage (.gpkg)</strong>
-              <span>Not supported directly. Convert to .shp or .geojson using QGIS: Layer → Export → Save Features As.</span>
+              <span>Supports point, line, and polygon feature extraction.</span>
             </div>
           </div>
         </div>

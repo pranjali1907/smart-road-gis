@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchAllUsers, updateUserRole } from '../api';
+import { fetchAllUsers, updateUserRole, deleteUser } from '../api';
 import { useAuth } from '../context/AuthContext';
 import {
   Users, Shield, Crown, User, RefreshCw, CheckCircle2,
-  AlertTriangle, ChevronDown, Search
+  AlertTriangle, ChevronDown, Search, Trash2
 } from 'lucide-react';
 
 // Roles the SuperAdmin can assign
@@ -64,6 +64,26 @@ export default function UserManagement() {
         showToast(`Role updated: ${user.username} → ${newRole}`, 'success');
       } else {
         showToast(result.error || 'Failed to update role', 'error');
+      }
+    } catch {
+      showToast('Network error', 'error');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleDeleteUser = async (user) => {
+    if (user.id === currentUser?.id) return;
+    if (!confirm(`Are you sure you want to permanently delete the user "${user.username}"?`)) return;
+    
+    setSaving(user.id);
+    try {
+      const result = await deleteUser(user.id);
+      if (result.success) {
+        setUsers(prev => prev.filter(u => u.id !== user.id));
+        showToast(`User ${user.username} deleted successfully`, 'success');
+      } else {
+        showToast(result.error || 'Failed to delete user', 'error');
       }
     } catch {
       showToast('Network error', 'error');
@@ -142,18 +162,19 @@ export default function UserManagement() {
               <th>Current Role</th>
               <th>Change Role</th>
               <th>Joined</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="7" className="empty-table">
+                <td colSpan="8" className="empty-table">
                   <RefreshCw size={18} className="spin-icon" /> Loading users...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan="7" className="empty-table">No users found</td>
+                <td colSpan="8" className="empty-table">No users found</td>
               </tr>
             ) : (
               filtered.map((user, idx) => (
@@ -210,6 +231,18 @@ export default function UserManagement() {
                     <span className="history-time" style={{ fontSize: '0.8rem' }}>
                       {user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-IN') : '—'}
                     </span>
+                  </td>
+                  <td className="actions-cell">
+                    {user.id !== currentUser?.id && (
+                      <button
+                        className="btn-icon danger-icon"
+                        onClick={() => handleDeleteUser(user)}
+                        title="Delete User"
+                        disabled={saving === user.id}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))

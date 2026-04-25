@@ -79,8 +79,8 @@ export default function Layout() {
     if (isRestrictedUser) {
       return (
         <MapView
-          selectedRoadId={null}
-          onSelectRoad={() => {}}  // no detail panel for restricted users
+          selectedRoadId={selectedRoadId}
+          onSelectRoad={handleSelectRoad}
         />
       );
     }
@@ -204,8 +204,8 @@ export default function Layout() {
             </h1>
           </div>
           <div className="topbar-right">
-            {/* Dataset Selector — hide for restricted users */}
-            {!isRestrictedUser && (
+            {/* Dataset Selector */}
+            {true && (
               <div className="dataset-selector-wrapper">
                 <button
                   className="dataset-selector-btn"
@@ -291,7 +291,7 @@ export default function Layout() {
         </header>
 
         {/* No dataset warning */}
-        {!isRestrictedUser && !activeDatasetId && (
+        {!activeDatasetId && (
           <div className="no-dataset-banner">
             <Database size={18} />
             <span>
@@ -309,13 +309,13 @@ export default function Layout() {
         <div className="content-area">{renderContent()}</div>
       </main>
 
-      {/* Road detail panel — not for restricted users */}
-      {selectedRoadId && !isRestrictedUser && (
+      {/* Road detail panel */}
+      {selectedRoadId && (
         <RoadDetail roadId={selectedRoadId} onClose={handleCloseDetail} />
       )}
 
-      {/* Add road modal — not for restricted users */}
-      {showAddModal && !isRestrictedUser && (
+      {/* Add road modal */}
+      {showAddModal && (
         <AddRoadModal onClose={() => setShowAddModal(false)} />
       )}
     </div>

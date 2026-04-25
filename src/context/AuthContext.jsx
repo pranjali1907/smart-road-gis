@@ -147,7 +147,6 @@ export function AuthProvider({ children }) {
     clearToken();
     localStorage.removeItem('smartroad_session');
     sessionStorage.removeItem('smartroad_session');
-    localStorage.removeItem('smartroad_active_dataset');
   }, [currentUser]);
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';

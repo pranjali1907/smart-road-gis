@@ -317,6 +317,11 @@ export async function updateUserRole(userId, role) {
   return await res.json();
 }
 
+export async function deleteUser(userId) {
+  const res = await apiFetch(`/users/${userId}`, { method: 'DELETE' });
+  return await res.json();
+}
+
 /* ─── GPKG EXPORT ─── */
 
 /** Returns the authenticated download URL for GPKG export */

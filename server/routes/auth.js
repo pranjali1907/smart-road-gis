@@ -110,6 +110,35 @@ router.put('/:id/role', (req, res) => {
   res.json({ success: true, user: { id: updated.id, username: updated.username, email: updated.email, role: updated.role, fullName: updated.full_name } });
 });
 
+// DELETE /api/users/:id — delete a user (superadmin only)
+router.delete('/:id', (req, res) => {
+  if (!req.user || req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Super Admin access required' });
+  }
+
+  const userId = parseInt(req.params.id);
+
+  if (userId === req.user.id) {
+    return res.status(403).json({ error: 'You cannot delete yourself' });
+  }
+
+  const target = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(userId);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+
+  if (target.role === 'superadmin') {
+    const saCount = db.prepare("SELECT COUNT(*) as c FROM users WHERE role='superadmin'").get().c;
+    if (saCount <= 1) {
+      return res.status(403).json({ error: 'Cannot delete the last Super Admin' });
+    }
+  }
+
+  db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  db.prepare('INSERT INTO activity (user_id, username, action) VALUES (?, ?, ?)')
+    .run(req.user.id, req.user.username, `user_deleted:${target.username}`);
+
+  res.json({ success: true });
+});
+
 // GET /api/activity — activity log
 router.get('/activity', (req, res) => {
   const activity = db.prepare('SELECT * FROM activity ORDER BY timestamp DESC LIMIT 200').all();

@@ -35,6 +35,8 @@ export function DatasetProvider({ children }) {
 
   useEffect(() => {
     loadDatasets();
+    const interval = setInterval(loadDatasets, 15000); // Poll every 15s to auto-refresh maps across users
+    return () => clearInterval(interval);
   }, [loadDatasets]);
 
   // Persist active dataset choice

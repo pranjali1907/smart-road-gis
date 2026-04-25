@@ -145,7 +145,7 @@ router.post('/:id/import', requireSuperAdmin, (req, res) => {
   }
 
   const insertRoad = db.prepare(`
-    INSERT OR IGNORE INTO roads (id, dataset_id, sr_no, fid, name, from_chainage, to_chainage,
+    INSERT OR REPLACE INTO roads (id, dataset_id, sr_no, fid, name, from_chainage, to_chainage,
       length, width, road_type, contractor, construction_date, maintenance_date, last_repair,
       surface_material, drainage_type, zone, ward_no, status, remarks, geometry)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

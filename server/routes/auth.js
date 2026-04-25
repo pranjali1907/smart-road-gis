@@ -65,6 +65,21 @@ router.post('/signup', validate(signupSchema), (req, res) => {
   res.json({ success: true, user: session, token });
 });
 
+// GET /api/users/me — get current user details
+router.get('/me', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+  const user = db.prepare('SELECT id, username, email, role, full_name FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  
+  res.json({
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    fullName: user.full_name,
+  });
+});
+
 // GET /api/users — list all users (admin only, no passwords)
 router.get('/', (req, res) => {
   const users = db.prepare('SELECT id, username, email, role, full_name, created_at FROM users ORDER BY created_at DESC').all();

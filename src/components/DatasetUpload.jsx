@@ -490,8 +490,8 @@ export default function DatasetUpload() {
               >
                 <Plus size={18} />
                 <div>
-                  <span className="mode-title">Append</span>
-                  <span className="mode-desc">Add new roads to the dataset alongside existing data</span>
+                  <span className="mode-title">Combine (Upsert)</span>
+                  <span className="mode-desc">Update existing roads and add new ones from the dataset</span>
                 </div>
               </button>
             </div>

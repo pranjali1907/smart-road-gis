@@ -61,6 +61,34 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Periodically refresh user data to catch role changes or deletion
+  useEffect(() => {
+    if (!currentUser) return;
+    const interval = setInterval(async () => {
+      const { fetchCurrentUser } = await import('../api');
+      const updatedUser = await fetchCurrentUser();
+      if (!updatedUser) {
+        // User might be deleted or token invalid
+        setCurrentUser(null);
+        clearToken();
+        localStorage.removeItem('smartroad_session');
+        sessionStorage.removeItem('smartroad_session');
+        window.location.reload();
+      } else if (updatedUser.role !== currentUser.role) {
+        // Update session
+        setCurrentUser(updatedUser);
+        if (localStorage.getItem('smartroad_session')) {
+          localStorage.setItem('smartroad_session', JSON.stringify(updatedUser));
+        } else {
+          sessionStorage.setItem('smartroad_session', JSON.stringify(updatedUser));
+        }
+        // Force reload to update UI completely for new role
+        window.location.reload();
+      }
+    }, 15000); // Check every 15 seconds
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
   /* ─── Login ─── */
   const login = useCallback(async (username, password, remember = false) => {
     const fieldErr = validateLoginFields({ username, password });

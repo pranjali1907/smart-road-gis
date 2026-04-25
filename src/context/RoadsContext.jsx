@@ -74,9 +74,16 @@ export function RoadsProvider({ children }) {
   useEffect(() => {
     const check = () => { resetServerCache(); isServerAvailable().then(setServerOnline); };
     check();
-    const interval = setInterval(check, 15000);
+    const interval = setInterval(() => {
+      check();
+      if (activeDatasetId) {
+        loadRoads();
+        loadHistory();
+        loadTrash();
+      }
+    }, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeDatasetId, loadRoads, loadHistory, loadTrash]);
 
   // Reload everything when dataset changes
   useEffect(() => {

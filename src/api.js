@@ -114,6 +114,16 @@ export async function fetchActivity() {
   }
 }
 
+export async function fetchCurrentUser() {
+  try {
+    const res = await apiFetch('/users/me');
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 /* ─── DATASETS ─── */
 
 export async function fetchDatasets() {

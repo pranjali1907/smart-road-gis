@@ -8,7 +8,7 @@ const { requireSuperAdmin } = require('../middleware/auth');
 const router = express.Router();
 
 // ── Upload directory ──────────────────────────────────────────────────────────
-const UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'imagery');
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads', 'imagery');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const storage = multer.diskStorage({

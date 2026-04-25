@@ -11,3 +11,11 @@ services:
         generateValue: true
       - key: CORS_ORIGIN
         value: https://smart-road-gis.vercel.app
+      - key: DB_PATH
+        value: /var/data/smartroad.db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+    disk:
+      name: smart-road-data
+      mountPath: /var/data
+      sizeGB: 1

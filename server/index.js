@@ -1,10 +1,19 @@
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+const path = require('path');
+const fs = require('fs');
+
+// Try loading .env from current directory first, then parent (root)
+const localEnv = path.join(__dirname, '.env');
+const rootEnv = path.join(__dirname, '..', '.env');
+if (fs.existsSync(localEnv)) require('dotenv').config({ path: localEnv });
+else if (fs.existsSync(rootEnv)) require('dotenv').config({ path: rootEnv });
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { initSchema, migrateExistingData } = require('./db/schema');
 const { authMiddleware } = require('./middleware/auth');
+
 // Import routes
 const authRoutes = require('./routes/auth');
 const roadsRoutes = require('./routes/roads');

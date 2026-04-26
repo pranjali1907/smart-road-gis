@@ -32,7 +32,11 @@
     "react-router-dom": "^7.14.0",
     "shpjs": "^6.2.0",
     "wkx": "^0.5.0",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "epsg-index": "^2.0.0",
+    "geotiff": "^3.0.5",
+    "pngjs": "^7.0.0",
+    "proj4": "^2.20.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

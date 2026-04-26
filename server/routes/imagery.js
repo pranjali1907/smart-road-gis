@@ -2,6 +2,12 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+
+// Try loading .env from server directory first, then root
+const serverEnv = path.join(__dirname, '..', '.env');
+const rootEnv = path.join(__dirname, '..', '..', '.env');
+if (fs.existsSync(serverEnv)) require('dotenv').config({ path: serverEnv });
+else if (fs.existsSync(rootEnv)) require('dotenv').config({ path: rootEnv });
 const db = require('../db/connection');
 const { requireSuperAdmin } = require('../middleware/auth');
 

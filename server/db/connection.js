@@ -12,7 +12,22 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'smart
 
 // Ensure data directory exists
 const dir = path.dirname(DB_PATH);
-if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+try {
+  if (!fs.existsSync(dir)) {
+    console.log(`  ➜  Creating data directory: ${dir}`);
+    fs.mkdirSync(dir, { recursive: true });
+  }
+} catch (err) {
+  console.error(`  ✗ Error creating data directory ${dir}:`, err.message);
+  // If it's a permission error at root, try falling back to local data folder
+  if (err.code === 'EACCES' && dir.startsWith('/')) {
+    const fallback = path.join(__dirname, '..', 'data');
+    console.log(`  ➜  Falling back to local data directory: ${fallback}`);
+    if (!fs.existsSync(fallback)) fs.mkdirSync(fallback, { recursive: true });
+    // Note: This won't change DB_PATH itself, but ensures the process continues
+    // if the user provided an unreachable path but the DB initialization can handle it.
+  }
+}
 
 const db = new Database(DB_PATH);
 

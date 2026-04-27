@@ -15,7 +15,11 @@ const router = express.Router();
 
 // ── Upload directory ──────────────────────────────────────────────────────────
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads', 'imagery');
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+} catch (err) {
+  console.error(`  ✗ Error creating upload directory ${UPLOAD_DIR}:`, err.message);
+}
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),

@@ -8,7 +8,15 @@ const rootEnv = path.join(__dirname, '..', '..', '.env');
 if (fs.existsSync(serverEnv)) require('dotenv').config({ path: serverEnv });
 else if (fs.existsSync(rootEnv)) require('dotenv').config({ path: rootEnv });
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'smartroad.db');
+let DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'smartroad.db');
+
+// ── Render Path Fix ─────────────────────────────────────────────────────────
+// Users often type /data/ instead of /var/data/ on Render. 
+// Render persistent disks are mounted at /var/data.
+if (DB_PATH.startsWith('/data/')) {
+  console.log(`  ➜  Redirecting incorrect Render path: ${DB_PATH} ➜ /var${DB_PATH}`);
+  DB_PATH = '/var' + DB_PATH;
+}
 
 // Ensure data directory exists
 const dir = path.dirname(DB_PATH);

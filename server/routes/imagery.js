@@ -14,7 +14,12 @@ const { requireSuperAdmin } = require('../middleware/auth');
 const router = express.Router();
 
 // ── Upload directory ──────────────────────────────────────────────────────────
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads', 'imagery');
+let UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads', 'imagery');
+
+// Fix common Render misconfiguration
+if (UPLOAD_DIR.startsWith('/data/')) {
+  UPLOAD_DIR = '/var' + UPLOAD_DIR;
+}
 try {
   if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 } catch (err) {

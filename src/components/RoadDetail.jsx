@@ -178,6 +178,8 @@ export default function RoadDetail({ roadId, onClose }) {
           {renderField('To Chainage (km)', 'toChainage', { type: 'number', icon: Ruler })}
           {renderField('Total Length (km)', 'length', { type: 'number', icon: Ruler })}
           {renderField('Width (m)', 'width', { type: 'number', icon: Ruler })}
+          {renderField('Divider', 'dividerOnRoad', { icon: Shield, choices: ['Yes', 'No'] })}
+          {renderField('Number of Lanes', 'numberOfLanes', { type: 'number', icon: Hash })}
         </div>
 
         <div className="detail-section">

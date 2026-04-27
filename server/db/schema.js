@@ -32,6 +32,8 @@ function initSchema() {
       last_repair TEXT DEFAULT '',
       surface_material TEXT DEFAULT '',
       drainage_type TEXT DEFAULT '',
+      divider_on_road TEXT DEFAULT 'No',
+      number_of_lanes INTEGER DEFAULT 2,
       zone TEXT DEFAULT '',
       ward_no TEXT DEFAULT '',
       status TEXT DEFAULT 'Good',
@@ -91,6 +93,8 @@ function initSchema() {
       last_repair TEXT DEFAULT '',
       surface_material TEXT DEFAULT '',
       drainage_type TEXT DEFAULT '',
+      divider_on_road TEXT DEFAULT 'No',
+      number_of_lanes INTEGER DEFAULT 2,
       zone TEXT DEFAULT '',
       ward_no TEXT DEFAULT '',
       status TEXT DEFAULT 'Good',
@@ -113,6 +117,26 @@ function initSchema() {
   `);
 
   console.log('  ✓ Database schema initialized');
+
+  // ── Auto-migration for new columns ──────────────────────────────────────────
+  try {
+    const columns = db.prepare("PRAGMA table_info(roads)").all();
+    const hasDivider = columns.some(c => c.name === 'divider_on_road');
+    const hasLanes = columns.some(c => c.name === 'number_of_lanes');
+
+    if (!hasDivider) {
+      db.exec("ALTER TABLE roads ADD COLUMN divider_on_road TEXT DEFAULT 'No'");
+      db.exec("ALTER TABLE trash ADD COLUMN divider_on_road TEXT DEFAULT 'No'");
+      console.log('  ✓ Added divider_on_road column');
+    }
+    if (!hasLanes) {
+      db.exec("ALTER TABLE roads ADD COLUMN number_of_lanes INTEGER DEFAULT 2");
+      db.exec("ALTER TABLE trash ADD COLUMN number_of_lanes INTEGER DEFAULT 2");
+      console.log('  ✓ Added number_of_lanes column');
+    }
+  } catch (err) {
+    console.error('  ✗ Migration error:', err.message);
+  }
 
   // ── Always upsert the superadmin from environment variables ──────────────
   // This runs on EVERY server start so that changing .env + restarting

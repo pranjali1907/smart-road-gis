@@ -37,7 +37,8 @@ function DrawHandler({ onPointAdded }) {
 const EMPTY = {
   name: '', fromChainage: 0, toChainage: 0, length: 0, width: 0,
   roadType: '', contractor: '', constructionDate: '', maintenanceDate: '',
-  lastRepair: '', surfaceMaterial: '', drainageType: '', zone: '', wardNo: '',
+  lastRepair: '', surfaceMaterial: '', drainageType: '', dividerOnRoad: 'No',
+  numberOfLanes: 2, zone: '', wardNo: '',
   remarks: '', status: 'Good',
 };
 
@@ -250,6 +251,20 @@ export default function AddRoadModal({ onClose }) {
                 <label>Width (m)</label>
                 <input type="number" step="0.1" value={form.width}
                   onChange={e => handleChange('width', parseFloat(e.target.value) || 0)} />
+              </div>
+
+              <div className="form-group">
+                <label>Divider on Road</label>
+                <select value={form.dividerOnRoad} onChange={e => handleChange('dividerOnRoad', e.target.value)}>
+                  <option value="No">No</option>
+                  <option value="Yes">Yes</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Number of Lanes</label>
+                <input type="number" value={form.numberOfLanes}
+                  onChange={e => handleChange('numberOfLanes', parseInt(e.target.value) || 0)} />
               </div>
 
               <div className="form-group">

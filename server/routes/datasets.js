@@ -147,8 +147,8 @@ router.post('/:id/import', requireSuperAdmin, (req, res) => {
   const insertRoad = db.prepare(`
     INSERT OR REPLACE INTO roads (id, dataset_id, sr_no, fid, name, from_chainage, to_chainage,
       length, width, road_type, contractor, construction_date, maintenance_date, last_repair,
-      surface_material, drainage_type, zone, ward_no, status, remarks, geometry)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      surface_material, drainage_type, divider_on_road, number_of_lanes, zone, ward_no, status, remarks, geometry)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const importTx = db.transaction((roadList) => {
@@ -160,7 +160,8 @@ router.post('/:id/import', requireSuperAdmin, (req, res) => {
         r.fromChainage || 0, r.toChainage || 0, r.length || 0, r.width || 0,
         r.roadType || '', r.contractor || '', r.constructionDate || '',
         r.maintenanceDate || '', r.lastRepair || '', r.surfaceMaterial || '',
-        r.drainageType || '', r.zone || '', r.wardNo || '', r.status || 'Good',
+        r.drainageType || '', r.dividerOnRoad || 'No', r.numberOfLanes || 2,
+        r.zone || '', r.wardNo || '', r.status || 'Good',
         r.remarks || '', JSON.stringify(r.geometry || {})
       );
     }

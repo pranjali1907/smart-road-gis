@@ -185,6 +185,8 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
               <th onClick={() => toggleSort('status')}>
                 Status <ArrowUpDown size={12} className={sortField === 'status' ? 'active' : ''} />
               </th>
+              <th>Divider</th>
+              <th>Lanes</th>
               <th onClick={() => toggleSort('zone')}>
                 Zone <ArrowUpDown size={12} className={sortField === 'zone' ? 'active' : ''} />
               </th>
@@ -217,6 +219,8 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
                     {road.status}
                   </span>
                 </td>
+                <td>{road.dividerOnRoad || 'No'}</td>
+                <td>{road.numberOfLanes || 2}</td>
                 <td className="zone-cell">{road.zone || '—'}</td>
                 <td>{road.wardNo || '—'}</td>
                 <td className="actions-cell" onClick={e => e.stopPropagation()}>

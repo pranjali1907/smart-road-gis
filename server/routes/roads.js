@@ -22,6 +22,8 @@ function rowToRoad(row) {
     lastRepair: row.last_repair,
     surfaceMaterial: row.surface_material,
     drainageType: row.drainage_type,
+    dividerOnRoad: row.divider_on_road,
+    numberOfLanes: row.number_of_lanes,
     zone: row.zone,
     wardNo: row.ward_no,
     status: row.status,
@@ -103,6 +105,8 @@ router.get('/export', async (req, res) => {
     { header: 'Width (m)', key: 'width', width: 10 },
     { header: 'Surface Material', key: 'surfaceMaterial', width: 18 },
     { header: 'Drainage Type', key: 'drainageType', width: 16 },
+    { header: 'Divider', key: 'dividerOnRoad', width: 10 },
+    { header: 'No. of Lanes', key: 'numberOfLanes', width: 12 },
     { header: 'Zone', key: 'zone', width: 14 },
     { header: 'Ward No.', key: 'wardNo', width: 10 },
     { header: 'Status', key: 'status', width: 16 },
@@ -133,6 +137,8 @@ router.get('/export', async (req, res) => {
       width: row.width ?? '',
       surfaceMaterial: row.surface_material || '',
       drainageType: row.drainage_type || '',
+      dividerOnRoad: row.divider_on_road || 'No',
+      numberOfLanes: row.number_of_lanes ?? 2,
       zone: row.zone || '',
       wardNo: row.ward_no || '',
       status: row.status || '',
@@ -327,6 +333,8 @@ router.get('/export-gpkg', (req, res) => {
       width REAL,
       surface_material TEXT,
       drainage_type TEXT,
+      divider_on_road TEXT,
+      number_of_lanes INTEGER,
       zone TEXT,
       ward_no TEXT,
       status TEXT,
@@ -351,9 +359,9 @@ router.get('/export-gpkg', (req, res) => {
   // Insert road rows
   const insert = gpkg.prepare(`
     INSERT INTO roads (geom, road_id, sr_no, name, road_type, from_chainage, to_chainage,
-      length, width, surface_material, drainage_type, zone, ward_no, status,
+      length, width, surface_material, drainage_type, divider_on_road, number_of_lanes, zone, ward_no, status,
       contractor, construction_date, last_repair, remarks)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertAll = gpkg.transaction((roadRows) => {
@@ -364,6 +372,7 @@ router.get('/export-gpkg', (req, res) => {
         row.road_type || '', row.from_chainage || 0, row.to_chainage || 0,
         row.length || 0, row.width || 0,
         row.surface_material || '', row.drainage_type || '',
+        row.divider_on_road || 'No', row.number_of_lanes ?? 2,
         row.zone || '', row.ward_no || '', row.status || 'Good',
         row.contractor || '', row.construction_date || '',
         row.last_repair || '', row.remarks || ''
@@ -403,7 +412,7 @@ router.get('/single/:datasetId/:id', (req, res) => {
 router.post('/', (req, res) => {
   const { datasetId, name, fromChainage, toChainage, length, width, roadType, contractor,
     constructionDate, maintenanceDate, lastRepair, surfaceMaterial, drainageType,
-    zone, wardNo, status, remarks, geometry } = req.body;
+    dividerOnRoad, numberOfLanes, zone, wardNo, status, remarks, geometry } = req.body;
 
   if (!datasetId) return res.status(400).json({ error: 'datasetId is required' });
 
@@ -415,12 +424,13 @@ router.post('/', (req, res) => {
   db.prepare(`
     INSERT INTO roads (id, dataset_id, sr_no, fid, name, from_chainage, to_chainage,
       length, width, road_type, contractor, construction_date, maintenance_date, last_repair,
-      surface_material, drainage_type, zone, ward_no, status, remarks, geometry)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      surface_material, drainage_type, divider_on_road, number_of_lanes, zone, ward_no, status, remarks, geometry)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, parseInt(datasetId), nextSr, nextSr, name || '', fromChainage || 0, toChainage || 0,
     length || 0, width || 0, roadType || '', contractor || '', constructionDate || '',
     maintenanceDate || '', lastRepair || '', surfaceMaterial || '', drainageType || '',
-    zone || '', wardNo || '', status || 'Good', remarks || '', JSON.stringify(geometry || {}));
+    dividerOnRoad || 'No', numberOfLanes || 2, zone || '', wardNo || '', status || 'Good',
+    remarks || '', JSON.stringify(geometry || {}));
 
   // Update dataset road count
   db.prepare('UPDATE datasets SET road_count = (SELECT COUNT(*) FROM roads WHERE dataset_id = ?) WHERE id = ?').run(parseInt(datasetId), parseInt(datasetId));
@@ -450,7 +460,8 @@ router.put('/:datasetId/:id', (req, res) => {
     length: 'length', width: 'width', roadType: 'road_type', contractor: 'contractor',
     constructionDate: 'construction_date', maintenanceDate: 'maintenance_date',
     lastRepair: 'last_repair', surfaceMaterial: 'surface_material',
-    drainageType: 'drainage_type', zone: 'zone', wardNo: 'ward_no',
+    drainageType: 'drainage_type', dividerOnRoad: 'divider_on_road',
+    numberOfLanes: 'number_of_lanes', zone: 'zone', ward_no: 'ward_no',
     status: 'status', remarks: 'remarks', srNo: 'sr_no',
   };
 
@@ -500,13 +511,14 @@ router.delete('/:datasetId/:id', (req, res) => {
       db.prepare(`
         INSERT INTO trash (id, dataset_id, sr_no, fid, name, from_chainage, to_chainage,
           length, width, road_type, contractor, construction_date, maintenance_date, last_repair,
-          surface_material, drainage_type, zone, ward_no, status, remarks, geometry, deleted_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          surface_material, drainage_type, divider_on_road, number_of_lanes, zone, ward_no, status, remarks, geometry, deleted_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(road.id, datasetId, road.sr_no, road.fid, road.name,
         road.from_chainage, road.to_chainage, road.length, road.width,
         road.road_type, road.contractor, road.construction_date,
         road.maintenance_date, road.last_repair, road.surface_material,
-        road.drainage_type, road.zone, road.ward_no, road.status,
+        road.drainage_type, road.divider_on_road, road.number_of_lanes,
+        road.zone, road.ward_no, road.status,
         road.remarks, geometryStr, editedBy);
 
       // Remove from roads

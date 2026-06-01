@@ -88,16 +88,23 @@ function getWeightForZoom(z) {
 /* ─── Fly to a selected road ─── */
 function FlyToRoad({ road }) {
   const map = useMap();
+  // Key on road.id so the effect re-fires whenever the selected road changes,
+  // regardless of whether the object reference is new or not.
+  const roadId = road?.id;
   useEffect(() => {
-    if (road?.geometry?.coordinates?.length) {
-      const coords = road.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-      // Use a small timeout to let the map fully render first
-      const t = setTimeout(() => {
-        map.flyToBounds(coords, { padding: [60, 60], maxZoom: 17, duration: 0.8 });
-      }, 150);
-      return () => clearTimeout(t);
-    }
-  }, [road, map]);
+    if (!roadId || !road?.geometry?.coordinates?.length) return;
+    const coords = road.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+    // Delay lets the map finish mounting/rendering before flying
+    const t = setTimeout(() => {
+      try {
+        map.flyToBounds(L.latLngBounds(coords), { padding: [60, 60], maxZoom: 17, duration: 0.9 });
+      } catch (_) {
+        map.setView(coords[0], 16);
+      }
+    }, 200);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roadId, map]); // intentionally exclude `road` object — roadId is the stable trigger
   return null;
 }
 
@@ -203,6 +210,7 @@ function RoadsGeoJSONLayer({ roads, filter, selectedRoadId, onSelectRoad }) {
     };
   }, [map]);
 
+  // Rebuild the GeoJSON layer only when the road data or map changes (NOT on selection change)
   useEffect(() => {
     if (layerRef.current) map.removeLayer(layerRef.current);
     const layer = L.geoJSON(geojsonData, {
@@ -224,8 +232,10 @@ function RoadsGeoJSONLayer({ roads, filter, selectedRoadId, onSelectRoad }) {
     layer.addTo(map);
     layerRef.current = layer;
     return () => { if (layerRef.current) { map.removeLayer(layerRef.current); layerRef.current = null; } };
-  }, [geojsonData, map, makeStyleFn]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geojsonData, map]); // Do NOT include makeStyleFn — it causes full layer rebuild on every selection
 
+  // Only re-style (no layer rebuild) when selection changes
   useEffect(() => {
     if (layerRef.current) layerRef.current.setStyle(makeStyleFn());
   }, [selectedRoadId, makeStyleFn]);
@@ -246,26 +256,34 @@ export default function MapView({ selectedRoadId, onSelectRoad }) {
   const [imageryList, setImageryList] = useState([]);
   const [imageryVisibility, setImageryVisibility] = useState({}); // { [id]: bool }
   const [showImageryPanel, setShowImageryPanel] = useState(false);
-  const [fetchedRoad, setFetchedRoad] = useState(null); // road fetched directly from API
+  const [fetchedRoad, setFetchedRoad] = useState(null); // road fetched from API as fallback
 
-  // Try to get road from context first; if not found, fetch from API
+  // Store getRoadById in a ref so we can call it inside effects without
+  // making it a dependency (prevents re-runs every time roads array updates)
+  const getRoadByIdRef = useRef(getRoadById);
+  getRoadByIdRef.current = getRoadById;
+
+  // Try context first, then fallback to directly-fetched road
   const selectedRoad = selectedRoadId
     ? (getRoadById(selectedRoadId) || fetchedRoad)
     : null;
 
-  // When selectedRoadId changes, fetch from API if not in context
+  // When selectedRoadId changes: clear stale fetchedRoad, then fetch from API
+  // if the road isn't already in the context (e.g. navigating from Registry).
+  // getRoadById is accessed via ref so it is NOT a dependency → no re-run loop.
   useEffect(() => {
     setFetchedRoad(null);
     if (!selectedRoadId || !activeDatasetId) return;
-    // Small delay to let context roads load first
     const t = setTimeout(async () => {
-      if (!getRoadById(selectedRoadId) && activeDatasetId) {
+      // Check via ref so this effect doesn't re-fire when roads array updates
+      if (!getRoadByIdRef.current(selectedRoadId)) {
         const road = await fetchRoadById(activeDatasetId, selectedRoadId);
         if (road) setFetchedRoad(road);
       }
-    }, 300);
+    }, 250);
     return () => clearTimeout(t);
-  }, [selectedRoadId, activeDatasetId, getRoadById]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRoadId, activeDatasetId]); // intentionally omit getRoadById (use ref instead)
 
   // Load imagery list on mount
   useEffect(() => {

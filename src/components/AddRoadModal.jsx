@@ -49,6 +49,7 @@ export default function AddRoadModal({ onClose }) {
   const [drawnPoints, setDrawnPoints] = useState([]);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('form'); // 'form' | 'map'
+  const [mapKey, setMapKey] = useState(0); // increment to force map re-init
 
   const handleChange = (field, value) =>
     setForm(prev => ({ ...prev, [field]: value }));
@@ -101,7 +102,7 @@ export default function AddRoadModal({ onClose }) {
           <button
             type="button"
             className={`add-road-tab ${activeTab === 'map' ? 'active' : ''}`}
-            onClick={() => setActiveTab('map')}
+            onClick={() => { setActiveTab('map'); setMapKey(k => k + 1); }}
           >
             🗺️ Draw on Map
             {drawnPoints.length > 0 && (
@@ -122,10 +123,11 @@ export default function AddRoadModal({ onClose }) {
                 disabled={drawnPoints.length === 0}>
                 <Undo2 size={13} /> Undo
               </button>
-              <button type="button" className="btn-secondary btn-sm"
-                onClick={() => setDrawnPoints([])}
-                disabled={drawnPoints.length === 0}>
-                Clear
+              <button type="button" className="btn-danger btn-sm"
+                onClick={() => { setDrawnPoints([]); setMapKey(k => k + 1); }}
+                disabled={drawnPoints.length === 0}
+                title="Remove all drawn points and reset the map">
+                🗑️ Clear Map
               </button>
             </div>
           </div>
@@ -133,7 +135,7 @@ export default function AddRoadModal({ onClose }) {
           {/* Map — always mounted so Leaflet initialises properly */}
           <div style={{ flex: 1, minHeight: '400px', position: 'relative' }}>
             <MapContainer
-              key="add-road-map"
+              key={mapKey}
               center={SANGLI_CENTER}
               zoom={14}
               style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}

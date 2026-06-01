@@ -99,7 +99,7 @@ export function RoadsProvider({ children }) {
   }, [activeDatasetId, loadRoads, loadHistory, loadTrash]);
 
   const getRoadById = useCallback((id) => {
-    return roads.find(r => r.id === id) || null;
+    return roads.find(r => String(r.id) === String(id)) || null;
   }, [roads]);
 
   const addRoad = useCallback(async (roadData, editedBy) => {

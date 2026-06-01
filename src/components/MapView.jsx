@@ -2,6 +2,8 @@ import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { useRoads } from '../context/RoadsContext';
+import { useDatasets } from '../context/DatasetContext';
+import { fetchRoadById } from '../api';
 import { ROAD_TYPE_COLORS } from '../data/sampleRoads';
 import { Layers, Image as ImageIcon, Eye, EyeOff, Globe, Satellite } from 'lucide-react';
 import { fetchImagery, getImageryFileUrl } from '../api';
@@ -89,7 +91,11 @@ function FlyToRoad({ road }) {
   useEffect(() => {
     if (road?.geometry?.coordinates?.length) {
       const coords = road.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-      map.flyToBounds(coords, { padding: [60, 60], maxZoom: 17, duration: 0.8 });
+      // Use a small timeout to let the map fully render first
+      const t = setTimeout(() => {
+        map.flyToBounds(coords, { padding: [60, 60], maxZoom: 17, duration: 0.8 });
+      }, 150);
+      return () => clearTimeout(t);
     }
   }, [road, map]);
   return null;
@@ -234,12 +240,32 @@ function RoadsGeoJSONLayer({ roads, filter, selectedRoadId, onSelectRoad }) {
 /* ── Main MapView component ────────────────────────────────── */
 export default function MapView({ selectedRoadId, onSelectRoad }) {
   const { roads, getRoadById } = useRoads();
+  const { activeDatasetId } = useDatasets();
   const [filter, setFilter] = useState('All');
   const [baseLayerId, setBaseLayerId] = useState('street');
   const [imageryList, setImageryList] = useState([]);
   const [imageryVisibility, setImageryVisibility] = useState({}); // { [id]: bool }
   const [showImageryPanel, setShowImageryPanel] = useState(false);
-  const selectedRoad = selectedRoadId ? getRoadById(selectedRoadId) : null;
+  const [fetchedRoad, setFetchedRoad] = useState(null); // road fetched directly from API
+
+  // Try to get road from context first; if not found, fetch from API
+  const selectedRoad = selectedRoadId
+    ? (getRoadById(selectedRoadId) || fetchedRoad)
+    : null;
+
+  // When selectedRoadId changes, fetch from API if not in context
+  useEffect(() => {
+    setFetchedRoad(null);
+    if (!selectedRoadId || !activeDatasetId) return;
+    // Small delay to let context roads load first
+    const t = setTimeout(async () => {
+      if (!getRoadById(selectedRoadId) && activeDatasetId) {
+        const road = await fetchRoadById(activeDatasetId, selectedRoadId);
+        if (road) setFetchedRoad(road);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [selectedRoadId, activeDatasetId, getRoadById]);
 
   // Load imagery list on mount
   useEffect(() => {

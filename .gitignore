@@ -29,3 +29,12 @@ server/data/*.db-shm
 server/data/*.db-wal
 server/.env
 server/uploads/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# AWS deployment artifacts
+deploy.zip
+.elasticbeanstalk/saved_configs/

@@ -4,7 +4,8 @@ import { useRoads } from '../context/RoadsContext';
 import { useDatasets } from '../context/DatasetContext';
 import {
   LayoutDashboard, Map, ListOrdered, History, LogOut, ChevronLeft, ChevronRight,
-  Menu, Bell, Search, MapPin, Upload, Trash2, Database, ChevronDown, Users
+  Menu, Bell, Search, MapPin, Upload, Trash2, Database, ChevronDown, Users,
+  Wifi, WifiOff, Plus
 } from 'lucide-react';
 import Dashboard from './Dashboard';
 import MapView from './MapView';
@@ -16,18 +17,11 @@ import DatasetUpload from './DatasetUpload';
 import TrashView from './TrashView';
 import UserManagement from './UserManagement';
 
-// ─── Role-based access matrix ───────────────────────────────────────────────
-// superadmin : Dashboard, Map, Registry, Audit Log, Trash, Upload, User Mgmt
-// admin      : Dashboard, Map, Registry, Audit Log, Upload   (NO Trash)
-// user       : Road Registry ONLY  (superadmin controls via User Management)
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function Layout() {
   const { currentUser, isAdmin, isSuperAdmin, isRestrictedUser, logout, getRoleLabel } = useAuth();
   const { trash, serverOnline } = useRoads();
   const { datasets, activeDataset, activeDatasetId, switchDataset } = useDatasets();
 
-  // 'user' (restricted) starts at map-only view
   const [activeView, setActiveView] = useState(isRestrictedUser ? 'map' : 'dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedRoadId, setSelectedRoadId] = useState(null);
@@ -40,150 +34,147 @@ export default function Layout() {
   const handleCloseDetail = () => { setSelectedRoadId(null); };
   const handleViewOnMap = (roadId) => { setSelectedRoadId(roadId); setActiveView('map'); };
 
-  // ─── Build nav per role ───
   let navItems = [];
 
   if (isRestrictedUser) {
-    // 'user' role: Map View only — read-only, no attribute table, no editing
-    navItems = [
-      { id: 'map', label: 'Map View', icon: Map },
-    ];
+    navItems = [{ id: 'map', label: 'Map View', icon: Map, section: 'main' }];
   } else {
-    // admin & superadmin share base nav
     navItems = [
-      { id: 'dashboard', label: 'Dashboard',    icon: LayoutDashboard },
-      { id: 'map',       label: 'Map View',      icon: Map },
-      { id: 'registry',  label: 'Road Registry', icon: ListOrdered },
-      { id: 'history',   label: 'Audit Log',     icon: History },
+      { id: 'dashboard', label: 'Dashboard',    icon: LayoutDashboard, section: 'main' },
+      { id: 'map',       label: 'Map View',      icon: Map,             section: 'main' },
+      { id: 'registry',  label: 'Road Registry', icon: ListOrdered,     section: 'main' },
+      { id: 'history',   label: 'Audit Log',     icon: History,         section: 'main' },
     ];
-
-    // Trash — SuperAdmin only
-    if (isSuperAdmin) {
-      navItems.push({ id: 'trash', label: 'Trash', icon: Trash2, badge: trash.length || null });
-    }
-
-    // Upload Dataset — admin & superadmin
-    if (isAdmin) {
-      navItems.push({ id: 'upload', label: 'Upload Dataset', icon: Upload });
-    }
-
-    // User Management — SuperAdmin only
-    if (isSuperAdmin) {
-      navItems.push({ id: 'users', label: 'User Management', icon: Users });
-    }
+    if (isSuperAdmin) navItems.push({ id: 'trash',  label: 'Trash',           icon: Trash2, badge: trash.length || null, section: 'manage' });
+    if (isAdmin)      navItems.push({ id: 'upload', label: 'Upload Dataset',   icon: Upload,                              section: 'manage' });
+    if (isSuperAdmin) navItems.push({ id: 'users',  label: 'User Management',  icon: Users,                               section: 'manage' });
   }
 
-  // ─── Render content per role ───
-  const renderContent = () => {
-    // 'user' role is strictly locked to Map View — no registry, no editing, no detail panel
-    if (isRestrictedUser) {
-      return (
-        <MapView
-          selectedRoadId={selectedRoadId}
-          onSelectRoad={handleSelectRoad}
-        />
-      );
-    }
+  const mainNav   = navItems.filter(i => i.section === 'main'   || !i.section);
+  const manageNav = navItems.filter(i => i.section === 'manage');
 
+  const renderContent = () => {
+    if (isRestrictedUser) {
+      return <MapView selectedRoadId={selectedRoadId} onSelectRoad={handleSelectRoad} />;
+    }
     switch (activeView) {
-      case 'dashboard':
-        return <Dashboard onViewOnMap={handleViewOnMap} />;
-      case 'map':
-        return (
-          <MapView
-            selectedRoadId={selectedRoadId}
-            onSelectRoad={handleSelectRoad}
-          />
-        );
-      case 'registry':
-        return (
-          <RoadRegistry
-            onSelectRoad={handleSelectRoad}
-            onAddRoad={() => setShowAddModal(true)}
-            onViewOnMap={handleViewOnMap}
-          />
-        );
-      case 'history':
-        return <EditHistory />;
-      case 'trash':
-        // Trash is gated to superadmin only
-        return isSuperAdmin ? <TrashView /> : <Dashboard onViewOnMap={handleViewOnMap} />;
-      case 'upload':
-        return isAdmin ? <DatasetUpload /> : <Dashboard onViewOnMap={handleViewOnMap} />;
-      case 'users':
-        return isSuperAdmin ? <UserManagement /> : <Dashboard onViewOnMap={handleViewOnMap} />;
-      default:
-        return <Dashboard onViewOnMap={handleViewOnMap} />;
+      case 'dashboard': return <Dashboard onViewOnMap={handleViewOnMap} />;
+      case 'map':       return <MapView selectedRoadId={selectedRoadId} onSelectRoad={handleSelectRoad} />;
+      case 'registry':  return <RoadRegistry onSelectRoad={handleSelectRoad} onAddRoad={() => setShowAddModal(true)} onViewOnMap={handleViewOnMap} />;
+      case 'history':   return <EditHistory />;
+      case 'trash':     return isSuperAdmin ? <TrashView />      : <Dashboard onViewOnMap={handleViewOnMap} />;
+      case 'upload':    return isAdmin      ? <DatasetUpload />  : <Dashboard onViewOnMap={handleViewOnMap} />;
+      case 'users':     return isSuperAdmin ? <UserManagement /> : <Dashboard onViewOnMap={handleViewOnMap} />;
+      default:          return <Dashboard onViewOnMap={handleViewOnMap} />;
     }
   };
 
-  const roleLabel = getRoleLabel(currentUser?.role);
-  const roleClass =
-    currentUser?.role === 'superadmin' ? 'superadmin' :
-    currentUser?.role === 'admin'      ? 'admin' : 'user';
+  const roleLabel      = getRoleLabel(currentUser?.role);
+  const roleClass      = currentUser?.role === 'superadmin' ? 'superadmin' : currentUser?.role === 'admin' ? 'admin' : 'user';
+  const currentNavItem = navItems.find(n => n.id === activeView);
+
+  const NavBtn = ({ item }) => (
+    <button
+      className={`pnav-item ${activeView === item.id ? 'active' : ''}`}
+      onClick={() => { setActiveView(item.id); setShowMobileNav(false); }}
+      title={sidebarCollapsed ? item.label : undefined}
+    >
+      <span className="pnav-icon"><item.icon size={18} /></span>
+      {!sidebarCollapsed && <span className="pnav-label">{item.label}</span>}
+      {item.badge && !sidebarCollapsed && <span className="pnav-badge">{item.badge}</span>}
+      {item.badge && sidebarCollapsed  && <span className="pnav-badge-dot" />}
+    </button>
+  );
 
   return (
     <div className="app-layout">
-      {/* Sidebar */}
-      <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${showMobileNav ? 'mobile-open' : ''}`}>
-        <div className="sidebar-header">
-          <div className="sidebar-brand">
-            <div className="brand-icon"><MapPin size={22} /></div>
+
+      {/* ── Sidebar ── */}
+      <aside className={`psidebar ${sidebarCollapsed ? 'collapsed' : ''} ${showMobileNav ? 'mobile-open' : ''}`}>
+
+        {/* Brand */}
+        <div className="psidebar-header">
+          <div className="psidebar-brand">
+            <div className="pbrand-icon"><MapPin size={20} /></div>
             {!sidebarCollapsed && (
-              <div className="brand-text">
-                <span className="brand-name">Road QGIS</span>
-                <span className="brand-sub">Portal</span>
+              <div className="pbrand-text">
+                <span className="pbrand-name">Smart Road</span>
+                <span className="pbrand-sub">GIS Portal</span>
               </div>
             )}
           </div>
           <button
-            className="sidebar-toggle"
+            className="psidebar-toggle"
             onClick={() => setSidebarCollapsed(v => !v)}
             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-            {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            {sidebarCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
           </button>
         </div>
 
-        <nav className="sidebar-nav">
-          {navItems.map(item => (
-            <button
-              key={item.id}
-              className={`nav-item ${activeView === item.id ? 'active' : ''}`}
-              onClick={() => { setActiveView(item.id); setShowMobileNav(false); }}
-              title={item.label}
-            >
-              <item.icon size={20} />
-              {!sidebarCollapsed && <span>{item.label}</span>}
-              {item.badge && !sidebarCollapsed && <span className="nav-badge">{item.badge}</span>}
-              {item.badge && sidebarCollapsed && <span className="nav-badge-dot" />}
-              {activeView === item.id && <div className="nav-indicator" />}
-            </button>
-          ))}
+        {/* Active dataset chip */}
+        {!sidebarCollapsed && activeDataset && (
+          <div className="psidebar-dataset">
+            <Database size={12} />
+            <span className="psidebar-ds-name">{activeDataset.name}</span>
+            <span className="psidebar-ds-count">{activeDataset.roadCount}</span>
+          </div>
+        )}
+
+        {/* Navigation */}
+        <nav className="psidebar-nav">
+          {!sidebarCollapsed && mainNav.length > 0 && (
+            <span className="pnav-section-label">Navigation</span>
+          )}
+          {mainNav.map(item => <NavBtn key={item.id} item={item} />)}
+
+          {manageNav.length > 0 && (
+            <>
+              {!sidebarCollapsed && <span className="pnav-section-label">Manage</span>}
+              {manageNav.map(item => <NavBtn key={item.id} item={item} />)}
+            </>
+          )}
         </nav>
 
-        <div className="sidebar-footer">
-          {!sidebarCollapsed && (
-            <div className={`server-status ${serverOnline ? 'online' : 'offline'}`}>
-              <span className="server-dot" />
-              <span>{serverOnline ? 'Server Connected' : 'Server Offline'}</span>
-            </div>
-          )}
-          <div className={`sidebar-user ${sidebarCollapsed ? 'collapsed' : ''}`}>
-            <div className="user-avatar">
+        {/* Footer */}
+        <div className="psidebar-footer">
+          {/* Server status pill */}
+          <div className={`pserver-status ${serverOnline ? 'online' : 'offline'}`}>
+            {serverOnline
+              ? <Wifi size={sidebarCollapsed ? 14 : 12} />
+              : <WifiOff size={sidebarCollapsed ? 14 : 12} />}
+            {!sidebarCollapsed && <span>{serverOnline ? 'Server Online' : 'Server Offline'}</span>}
+          </div>
+
+          {/* User card */}
+          <div className={`psidebar-user ${sidebarCollapsed ? 'collapsed' : ''}`}>
+            <div className="puser-avatar">
               {currentUser?.fullName?.[0]?.toUpperCase() || 'U'}
             </div>
             {!sidebarCollapsed && (
-              <div className="user-info">
-                <span className="user-name">{currentUser?.fullName}</span>
-                <span className={`user-role ${roleClass}`}>{roleLabel}</span>
+              <div className="puser-info">
+                <span className="puser-name">{currentUser?.fullName}</span>
+                <span className={`puser-role ${roleClass}`}>{roleLabel}</span>
               </div>
             )}
+            {!sidebarCollapsed && (
+              <button className="plogout-btn" onClick={logout} title="Sign Out">
+                <LogOut size={15} />
+              </button>
+            )}
           </div>
-          <button className="nav-item logout-btn" onClick={logout} title="Sign Out">
-            <LogOut size={20} />
-            {!sidebarCollapsed && <span>Sign Out</span>}
-          </button>
+
+          {/* Collapsed logout */}
+          {sidebarCollapsed && (
+            <button
+              className="pnav-item"
+              onClick={logout}
+              title="Sign Out"
+              style={{ color: '#ef4444', marginTop: '4px' }}
+            >
+              <span className="pnav-icon"><LogOut size={18} /></span>
+            </button>
+          )}
         </div>
       </aside>
 
@@ -192,115 +183,154 @@ export default function Layout() {
         <div className="sidebar-overlay" onClick={() => setShowMobileNav(false)} />
       )}
 
-      {/* Main content */}
+      {/* ── Main content ── */}
       <main className="main-content">
-        <header className="topbar">
-          <div className="topbar-left">
-            <button className="mobile-menu-btn" onClick={() => setShowMobileNav(v => !v)}>
+
+        {/* Topbar */}
+        <header className="ptopbar">
+          <div className="ptopbar-left">
+            <button className="pmobile-menu-btn" onClick={() => setShowMobileNav(v => !v)}>
               <Menu size={20} />
             </button>
-            <h1 className="topbar-title">
-              {navItems.find(n => n.id === activeView)?.label || (isRestrictedUser ? 'Road Registry' : 'Dashboard')}
-            </h1>
+            <div className="ptopbar-page">
+              {currentNavItem && (
+                <span className="ptopbar-page-icon">
+                  <currentNavItem.icon size={16} />
+                </span>
+              )}
+              <h1 className="ptopbar-title">
+                {currentNavItem?.label || (isRestrictedUser ? 'Map View' : 'Dashboard')}
+              </h1>
+            </div>
           </div>
-          <div className="topbar-right">
-            {/* Dataset Selector */}
-            {true && (
-              <div className="dataset-selector-wrapper">
-                <button
-                  className="dataset-selector-btn"
-                  onClick={() => setShowDatasetPicker(v => !v)}
-                  title="Switch Dataset"
-                >
-                  <Database size={15} />
-                  <span className="dataset-selector-name">
-                    {activeDataset?.name || 'No Dataset'}
-                  </span>
-                  <ChevronDown size={14} className={showDatasetPicker ? 'rotate-180' : ''} />
-                </button>
-                {showDatasetPicker && (
-                  <>
-                    <div className="dropdown-overlay" onClick={() => setShowDatasetPicker(false)} />
-                    <div className="dataset-dropdown animate-fade-in">
-                      <div className="dataset-dropdown-header">
-                        <span className="dataset-dropdown-title">Select Dataset</span>
-                        <span className="dataset-dropdown-count">{datasets.length} available</span>
-                      </div>
-                      <div className="dataset-dropdown-list">
-                        {datasets.length === 0 ? (
-                          <div className="dataset-dropdown-empty">
-                            No datasets available. Upload a dataset first.
-                          </div>
-                        ) : (
-                          datasets.map(ds => (
-                            <button
-                              key={ds.id}
-                              className={`dataset-dropdown-item ${ds.id === activeDatasetId ? 'active' : ''}`}
-                              onClick={() => { switchDataset(ds.id); setShowDatasetPicker(false); }}
-                            >
-                              <div className="dataset-item-info">
-                                <span className="dataset-item-name">{ds.name}</span>
-                                <span className="dataset-item-meta">
-                                  {ds.roadCount} roads · by {ds.uploadedBy}
-                                  {ds.isDefault && ' · Default'}
-                                </span>
-                              </div>
-                              {ds.id === activeDatasetId && <span className="dataset-item-active">✓</span>}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
 
-            <div className="topbar-search">
-              <Search size={16} />
+          <div className="ptopbar-right">
+
+            {/* Dataset selector */}
+            <div className="pdataset-wrapper">
+              <button
+                className="pdataset-btn"
+                onClick={() => setShowDatasetPicker(v => !v)}
+                title="Switch dataset"
+              >
+                <Database size={14} />
+                <span className="pdataset-name">{activeDataset?.name || 'No Dataset'}</span>
+                <ChevronDown size={13} className={showDatasetPicker ? 'rotate-180' : ''} />
+              </button>
+              {showDatasetPicker && (
+                <>
+                  <div className="dropdown-overlay" onClick={() => setShowDatasetPicker(false)} />
+                  <div className="pdataset-dropdown animate-fade-in">
+                    <div className="pdataset-dropdown-header">
+                      <span>Select Dataset</span>
+                      <span className="pdataset-count">{datasets.length} available</span>
+                    </div>
+                    <div className="pdataset-list">
+                      {datasets.length === 0 ? (
+                        <div className="pdataset-empty">No datasets available</div>
+                      ) : (
+                        datasets.map(ds => (
+                          <button
+                            key={ds.id}
+                            className={`pdataset-item ${ds.id === activeDatasetId ? 'active' : ''}`}
+                            onClick={() => { switchDataset(ds.id); setShowDatasetPicker(false); }}
+                          >
+                            <div
+                              className="pdataset-item-dot"
+                              style={{ background: ds.id === activeDatasetId ? 'var(--primary)' : 'var(--border)' }}
+                            />
+                            <div className="pdataset-item-info">
+                              <span className="pdataset-item-name">{ds.name}</span>
+                              <span className="pdataset-item-meta">
+                                {ds.roadCount} roads · {ds.uploadedBy}
+                                {ds.isDefault && ' · Default'}
+                              </span>
+                            </div>
+                            {ds.id === activeDatasetId && <span className="pdataset-check">✓</span>}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Search bar */}
+            <div className="ptopbar-search">
+              <Search size={14} />
               <input type="text" placeholder="Search roads..." readOnly />
             </div>
-            <button className="topbar-icon-btn" title="Notifications">
-              <Bell size={18} />
-              <span className="notification-dot" />
+
+            {/* Add Road — admin+ on registry view */}
+            {isAdmin && activeView === 'registry' && (
+              <button
+                className="ptopbar-add-btn"
+                onClick={() => setShowAddModal(true)}
+                title="Add new road"
+              >
+                <Plus size={15} />
+                <span>Add Road</span>
+              </button>
+            )}
+
+            {/* Notifications */}
+            <button className="ptopbar-icon-btn" title="Notifications">
+              <Bell size={17} />
+              <span className="pnotif-dot" />
             </button>
-            <div className="topbar-user-menu">
-              <button className="topbar-user-btn" onClick={() => setShowUserMenu(v => !v)}>
-                <div className="topbar-avatar">
+
+            {/* User menu */}
+            <div className="ptopbar-user-menu">
+              <button className="ptopbar-avatar-btn" onClick={() => setShowUserMenu(v => !v)}>
+                <div className="ptopbar-avatar">
                   {currentUser?.fullName?.[0]?.toUpperCase() || 'U'}
                 </div>
+                <div className="ptopbar-user-text">
+                  <span className="ptopbar-user-name">{currentUser?.fullName}</span>
+                  <span className={`ptopbar-role ${roleClass}`}>{roleLabel}</span>
+                </div>
+                <ChevronDown size={13} className={showUserMenu ? 'rotate-180' : ''} />
               </button>
               {showUserMenu && (
                 <>
                   <div className="dropdown-overlay" onClick={() => setShowUserMenu(false)} />
-                  <div className="user-dropdown animate-fade-in">
-                    <div className="dropdown-header">
-                      <span className="dropdown-name">{currentUser?.fullName}</span>
-                      <span className="dropdown-email">{currentUser?.email}</span>
-                      <span className={`dropdown-role ${roleClass}`}>{roleLabel}</span>
+                  <div className="puser-dropdown animate-fade-in">
+                    <div className="puser-dropdown-header">
+                      <div className="puser-dropdown-avatar">
+                        {currentUser?.fullName?.[0]?.toUpperCase() || 'U'}
+                      </div>
+                      <div className="puser-dropdown-info">
+                        <div className="puser-dropdown-name">{currentUser?.fullName}</div>
+                        <div className="puser-dropdown-email">{currentUser?.email}</div>
+                        <span className={`puser-dropdown-role ${roleClass}`}>{roleLabel}</span>
+                      </div>
                     </div>
-                    <div className="dropdown-divider" />
-                    <button className="dropdown-item" onClick={logout}>
-                      <LogOut size={16} /> Sign Out
+                    <div className="pdropdown-divider" />
+                    <button className="pdropdown-item danger" onClick={logout}>
+                      <LogOut size={15} /> Sign Out
                     </button>
                   </div>
                 </>
               )}
             </div>
+
           </div>
         </header>
 
         {/* No dataset warning */}
         {!activeDatasetId && (
-          <div className="no-dataset-banner">
-            <Database size={18} />
+          <div className="pno-dataset-banner">
+            <Database size={16} />
             <span>
               No dataset selected.{' '}
-              {isSuperAdmin ? 'Upload a dataset to get started.' : 'Ask your Super Admin to upload a dataset.'}
+              {isSuperAdmin
+                ? 'Upload a dataset to get started.'
+                : 'Ask your Super Admin to upload a dataset.'}
             </span>
             {isAdmin && (
               <button className="btn-primary btn-sm" onClick={() => setActiveView('upload')}>
-                <Upload size={14} /> Upload Dataset
+                <Upload size={13} /> Upload Dataset
               </button>
             )}
           </div>

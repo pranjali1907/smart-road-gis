@@ -49,6 +49,8 @@ app.use(cors({
     if (origin === 'https://smart-road-gis.vercel.app') return callback(null, true);
     // Allow any *.vercel.app origin for preview deployments
     if (/\.vercel\.app$/.test(origin)) return callback(null, true);
+    // Allow any *.amplifyapp.com origin for AWS Amplify deployments
+    if (/\.amplifyapp\.com$/.test(origin)) return callback(null, true);
     return callback(new Error(`CORS blocked: ${origin}`));
   },
   credentials: true,

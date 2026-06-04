@@ -88,23 +88,46 @@ function getWeightForZoom(z) {
 /* ─── Fly to a selected road ─── */
 function FlyToRoad({ road }) {
   const map = useMap();
-  // Key on road.id so the effect re-fires whenever the selected road changes,
-  // regardless of whether the object reference is new or not.
+  // roadId is the stable dep that triggers the effect on every road change
   const roadId = road?.id;
+  // roadRef lets the timeout closure always read the latest road data
+  const roadRef = useRef(road);
+  roadRef.current = road;
+
   useEffect(() => {
-    if (!roadId || !road?.geometry?.coordinates?.length) return;
-    const coords = road.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-    // Delay lets the map finish mounting/rendering before flying
+    if (!roadId) return;
+
+    // Extract flat [lat, lng] list from either LineString or MultiLineString
+    const extractLatLngs = (geom) => {
+      if (!geom?.coordinates?.length) return [];
+      if (geom.type === 'LineString') {
+        return geom.coordinates.map(([lng, lat]) => [lat, lng]);
+      }
+      if (geom.type === 'MultiLineString') {
+        // coordinates is [[[lng,lat],...], [[lng,lat],...]]
+        return geom.coordinates.flat().map(([lng, lat]) => [lat, lng]);
+      }
+      return [];
+    };
+
     const t = setTimeout(() => {
+      const r = roadRef.current;
+      const latLngs = extractLatLngs(r?.geometry);
+      if (latLngs.length === 0) return;
       try {
-        map.flyToBounds(L.latLngBounds(coords), { padding: [60, 60], maxZoom: 17, duration: 0.9 });
-      } catch (_) {
-        map.setView(coords[0], 16);
+        if (latLngs.length === 1) {
+          map.setView(latLngs[0], 17);
+        } else {
+          map.flyToBounds(L.latLngBounds(latLngs), { padding: [60, 60], maxZoom: 17, duration: 0.9 });
+        }
+      } catch (err) {
+        console.warn('FlyToRoad failed:', err);
+        if (latLngs[0]) map.setView(latLngs[0], 16);
       }
     }, 200);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roadId, map]); // intentionally exclude `road` object — roadId is the stable trigger
+  }, [roadId, map]); // road accessed via ref — excluded from deps intentionally
   return null;
 }
 

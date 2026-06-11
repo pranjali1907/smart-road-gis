@@ -246,7 +246,7 @@ function RoadsGeoJSONLayer({ roads, filter, selectedRoadId, onSelectRoad }) {
         lyr.bindPopup(`
           <div class="map-popup">
             <strong>${p.name || `Road #${p.srNo || p.id}`}</strong>
-            <span>Sr. No. ${p.fid || p.id} · ${p.roadType || 'Unclassified'}</span>
+            <span>FID ${p.fid} · Sr. No. ${p.srNo || '—'} · ${p.roadType || 'Unclassified'}</span>
             <span>Length: ${p.length || 'N/A'} km · Width: ${p.width || 'N/A'}m</span>
             <span>Status: ${p.status || 'Unknown'}</span>
             ${p.zone ? `<span>Zone: ${p.zone}</span>` : ''}

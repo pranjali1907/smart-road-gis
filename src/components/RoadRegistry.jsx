@@ -168,7 +168,10 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
           <thead>
             <tr>
               <th onClick={() => toggleSort('fid')}>
-                Sr. No. <ArrowUpDown size={12} className={sortField === 'fid' ? 'active' : ''} />
+                FID <ArrowUpDown size={12} className={sortField === 'fid' ? 'active' : ''} />
+              </th>
+              <th onClick={() => toggleSort('sr_no')}>
+                Sr. No. <ArrowUpDown size={12} className={sortField === 'sr_no' ? 'active' : ''} />
               </th>
               <th onClick={() => toggleSort('name')}>
                 Road Name <ArrowUpDown size={12} className={sortField === 'name' ? 'active' : ''} />
@@ -204,6 +207,7 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
                 className={`registry-row ${isRestrictedUser ? 'viewer-row' : ''}`}
               >
                 <td className="road-id">{road.fid ?? '—'}</td>
+                <td>{road.srNo ?? '—'}</td>
                 <td className="road-name-cell">
                   <span className="road-name-text">{road.name || `Road #${road.srNo || road.fid || road.id}`}</span>
                 </td>
@@ -251,7 +255,7 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
             ))}
             {data.roads.length === 0 && !loading && (
               <tr>
-                <td colSpan="9" className="empty-table">
+                <td colSpan="12" className="empty-table">
                   No roads found matching your filters
                 </td>
               </tr>

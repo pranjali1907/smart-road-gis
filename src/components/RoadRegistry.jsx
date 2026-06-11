@@ -24,7 +24,7 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [sortField, setSortField] = useState('name');
+  const [sortField, setSortField] = useState('sr_no');
   const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
 

@@ -63,17 +63,31 @@ export function resetServerCache() {
   if (_serverCacheTimer) { clearTimeout(_serverCacheTimer); _serverCacheTimer = null; }
 }
 
+async function _pingHealth(timeoutMs = 15000) {
+  try {
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(timeoutMs) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function isServerAvailable() {
   if (_serverAvailable !== null) return _serverAvailable;
-  try {
-    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
-    _serverAvailable = res.ok;
-  } catch {
-    _serverAvailable = false;
+
+  // First attempt with generous timeout (handles Render cold-start)
+  let ok = await _pingHealth(15000);
+
+  // If first attempt fails, retry once after a short delay
+  if (!ok) {
+    await new Promise(r => setTimeout(r, 2000));
+    ok = await _pingHealth(15000);
   }
+
+  _serverAvailable = ok;
   if (_serverCacheTimer) clearTimeout(_serverCacheTimer);
-  // Re-check every 15 s so status badge stays accurate
-  _serverCacheTimer = setTimeout(() => { _serverAvailable = null; }, 15000);
+  // Cache result for 30s so it doesn't flicker on every poll cycle
+  _serverCacheTimer = setTimeout(() => { _serverAvailable = null; }, 30000);
   return _serverAvailable;
 }
 

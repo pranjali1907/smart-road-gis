@@ -70,19 +70,43 @@ export function RoadsProvider({ children }) {
     }
   }, [activeDatasetId]);
 
-  // Check server on mount, then poll every 15 s
+  // Check server on mount, then poll with backoff
   useEffect(() => {
-    const check = () => { resetServerCache(); isServerAvailable().then(setServerOnline); };
-    check();
-    const interval = setInterval(() => {
-      check();
-      if (activeDatasetId) {
-        loadRoads();
-        loadHistory();
-        loadTrash();
+    let consecutiveFailures = 0;
+
+    const check = async () => {
+      resetServerCache();
+      const online = await isServerAvailable();
+      setServerOnline(online);
+
+      if (online) {
+        consecutiveFailures = 0;
+        // Only fetch data when server is confirmed online
+        if (activeDatasetId) {
+          loadRoads();
+          loadHistory();
+          loadTrash();
+        }
+      } else {
+        consecutiveFailures++;
       }
-    }, 15000);
-    return () => clearInterval(interval);
+    };
+
+    check();
+
+    // Use dynamic interval: 45s when online, backs off up to 2 min when offline
+    let intervalId;
+    const scheduleNext = () => {
+      const baseInterval = 45000; // 45 seconds
+      const backoff = Math.min(consecutiveFailures * 15000, 75000); // max extra 75s
+      const interval = baseInterval + backoff;
+      intervalId = setTimeout(() => {
+        check().then(scheduleNext);
+      }, interval);
+    };
+    scheduleNext();
+
+    return () => { if (intervalId) clearTimeout(intervalId); };
   }, [activeDatasetId, loadRoads, loadHistory, loadTrash]);
 
   // Reload everything when dataset changes

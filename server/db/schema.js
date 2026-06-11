@@ -224,26 +224,53 @@ function migrateExistingData() {
       if (rawData.type === 'FeatureCollection' && Array.isArray(rawData.features)) {
         features = rawData.features.map((f, i) => {
           const props = f.properties || {};
+
+          // Helper: get value from first matching key (handles truncated GPKG names)
+          const get = (...keys) => {
+            for (const key of keys) {
+              if (props[key] !== undefined && props[key] !== null) return props[key];
+              const lower = key.toLowerCase();
+              const found = Object.keys(props).find(k => k.toLowerCase() === lower);
+              if (found && props[found] !== undefined && props[found] !== null) return props[found];
+            }
+            return undefined;
+          };
+          const getByPrefix = (...prefixes) => {
+            for (const prefix of prefixes) {
+              const lower = prefix.toLowerCase();
+              const found = Object.keys(props).find(k => k.toLowerCase().startsWith(lower));
+              if (found && props[found] !== undefined && props[found] !== null) return props[found];
+            }
+            return undefined;
+          };
+
+          const srNo = get('srNo', 'sr.no', 'sr_no', 'SR_NO') ?? i + 1;
+          const roadId = get('id', 'ID', 'road id', 'road_id') || get('fid', 'FID') || `ROAD-${String(i+1).padStart(4, '0')}`;
+          const fid = get('fid', 'FID') ?? i + 1;
+          const roadName = get('name', 'NAME', 'road_name', 'ROAD_NAME', 'road name') || '';
+          const zone = String(get('zone', 'ZONE') ?? '');
+          const wardNo = String(get('wardNo', 'ward', 'WARD', 'ward_no', 'ward no') ?? '');
+
           return {
-            id: props.id || props.ID || props.fid || `ROAD-${String(i+1).padStart(4, '0')}`,
-            srNo: props.srNo || props['sr.no'] || props.sr_no || props.SR_NO || i + 1,
-            fid: props.fid || props.FID || i + 1,
-            name: (props.name || props.NAME || props.road_name || '').trim() || `Road in ${props.zone || props.ZONE || 'Unknown'}${props.wardNo || props.ward || props.WARD ? ' Ward ' + (props.wardNo || props.ward || props.WARD) : ''} (#${props.srNo || props['sr.no'] || props.sr_no || props.SR_NO || i + 1})`,
-            fromChainage: parseFloat(props.from_ch || props.FROM_CH || props.fromChainage || 0) || 0,
-            toChainage: parseFloat(props.to_ch || props.TO_CH || props.toChainage || 0) || 0,
-            length: parseFloat(props.length || props.LENGTH || 0) || 0,
-            width: parseFloat(props.width || props.WIDTH || 0) || 0,
-            roadType: props.roadType || props.road_type || props.type || '',
-            contractor: props.contractor || props.CONTRACTOR || '',
-            constructionDate: props.constructionDate || props.construction_date || props.year || '',
-            maintenanceDate: props.maintenanceDate || props.maintenance_date || '',
-            lastRepair: props.lastRepair || props.last_repair || '',
-            surfaceMaterial: props.surfaceMaterial || props.surface || props.material || '',
-            drainageType: props.drainageType || props.drainage || '',
-            zone: props.zone || props.ZONE || '',
-            wardNo: props.wardNo || props.ward || props.WARD || '',
-            status: props.status || props.STATUS || 'Good',
-            remarks: props.remarks || props.REMARKS || '',
+            id: roadId,
+            srNo,
+            fid,
+            name: roadName.trim() || `Road in ${zone || 'Unknown'}${wardNo ? ' Ward ' + wardNo : ''} (#${srNo})`,
+            fromChainage: parseFloat(get('from_ch', 'FROM_CH', 'fromChainage', 'from_chainage') ?? getByPrefix('from china', 'from ch') ?? 0) || 0,
+            toChainage: parseFloat(get('to_ch', 'TO_CH', 'toChainage', 'to_chainage') ?? getByPrefix('to china', 'to ch') ?? 0) || 0,
+            length: parseFloat(get('length', 'LENGTH') ?? getByPrefix('total leng') ?? 0) || 0,
+            width: parseFloat(get('width', 'WIDTH') ?? 0) || 0,
+            roadType: get('roadType', 'road_type', 'type', 'road type', 'ROAD_TYPE') || '',
+            contractor: get('contractor', 'CONTRACTOR') || '',
+            constructionDate: String(get('constructionDate', 'construction_date', 'year') ?? getByPrefix('y construc') ?? ''),
+            maintenanceDate: String(get('maintenanceDate', 'maintenance_date') ?? getByPrefix('maintainan', 'maintenan') ?? ''),
+            lastRepair: String(get('lastRepair', 'last_repair') ?? getByPrefix('la repair', 'last rep') ?? ''),
+            surfaceMaterial: get('surfaceMaterial', 'surface', 'material', 'surface_material') ?? getByPrefix('sur materi') ?? '',
+            drainageType: get('drainageType', 'drainage', 'drainage_type') ?? getByPrefix('drinage ty', 'drainage t') ?? '',
+            zone,
+            wardNo,
+            status: get('status', 'STATUS') || 'Good',
+            remarks: get('remarks', 'REMARKS', 'remark') || '',
             geometry: f.geometry || { type: 'LineString', coordinates: [] }
           };
         });

@@ -30,30 +30,80 @@ async function parseShapefile(file) {
 function featuresToRoads(features) {
   return features.map((feat, i) => {
     const props = feat.properties || {};
+
+    // Helper: get value from first matching key (case-insensitive, handles spaces and truncation)
+    const get = (...keys) => {
+      for (const key of keys) {
+        // Exact match first
+        if (props[key] !== undefined && props[key] !== null) return props[key];
+        // Case-insensitive match
+        const lower = key.toLowerCase();
+        const found = Object.keys(props).find(k => k.toLowerCase() === lower);
+        if (found && props[found] !== undefined && props[found] !== null) return props[found];
+      }
+      // Partial/prefix match for truncated GPKG columns (e.g. "from china" for "from chainage")
+      return undefined;
+    };
+
+    // Specific matchers for truncated fields — match by prefix
+    const getByPrefix = (...prefixes) => {
+      for (const prefix of prefixes) {
+        const lower = prefix.toLowerCase();
+        const found = Object.keys(props).find(k => k.toLowerCase().startsWith(lower));
+        if (found && props[found] !== undefined && props[found] !== null) return props[found];
+      }
+      return undefined;
+    };
+
+    const srNo = get('srNo', 'sr_no', 'SR_NO', 'sr.no', 'serial') ?? i + 1;
+    const roadId = get('id', 'ID', 'road id', 'road_id', 'ROAD_ID') || get('fid', 'FID') || `IMPORT-${String(i + 1).padStart(4, '0')}`;
+    const fid = get('fid', 'FID') ?? i + 1;
+    const name = get('name', 'NAME', 'road_name', 'ROAD_NAME', 'road name') || '';
+    const fromChainage = parseFloat(get('from_ch', 'FROM_CH', 'fromChainage', 'from_chainage') ?? getByPrefix('from china', 'from ch') ?? 0) || 0;
+    const toChainage = parseFloat(get('to_ch', 'TO_CH', 'toChainage', 'to_chainage') ?? getByPrefix('to china', 'to ch') ?? 0) || 0;
+    const length = parseFloat(get('length', 'LENGTH', 'len') ?? getByPrefix('total leng') ?? 0) || 0;
+    const width = parseFloat(get('width', 'WIDTH') ?? 0) || 0;
+    const roadType = get('roadType', 'road_type', 'ROAD_TYPE', 'type', 'TYPE', 'road type') || '';
+    const contractor = get('contractor', 'CONTRACTOR') || '';
+    const constructionDate = String(get('constructionDate', 'construction_date', 'CONSTRUCTION_DATE', 'year') ?? getByPrefix('y construc') ?? '');
+    const maintenanceDate = String(get('maintenanceDate', 'maintenance_date') ?? getByPrefix('maintainan', 'maintenan') ?? '');
+    const lastRepair = String(get('lastRepair', 'last_repair') ?? getByPrefix('la repair', 'last rep') ?? '');
+    const surfaceMaterial = get('surfaceMaterial', 'surface', 'SURFACE', 'material', 'surface_material') ?? getByPrefix('sur materi') ?? '';
+    const drainageType = get('drainageType', 'drainage', 'DRAINAGE', 'drainage_type') ?? getByPrefix('drinage ty', 'drainage t') ?? '';
+    const dividerOnRoad = get('dividerOnRoad', 'divider_on_road', 'divider') ?? getByPrefix('divider') ?? 'No';
+    const numberOfLanes = parseInt(get('numberOfLanes', 'number_of_lanes', 'lanes') ?? getByPrefix('number of') ?? 2) || 2;
+    const zone = String(get('zone', 'ZONE') ?? '');
+    const wardNo = String(get('wardNo', 'ward', 'WARD', 'ward_no', 'ward no') ?? '');
+    const status = get('status', 'STATUS') || 'Good';
+    const remarks = get('remarks', 'REMARKS', 'remark') || '';
+
     return {
-      id: props.id || props.ID || props.fid || `IMPORT-${String(i + 1).padStart(4, '0')}`,
-      srNo: props.srNo || props.sr_no || props.SR_NO || props.serial || i + 1,
-      fid: props.fid || props.FID || i + 1,
-      name: props.name || props.NAME || props.road_name || props.ROAD_NAME || '',
-      fromChainage: parseFloat(props.from_ch || props.FROM_CH || props.fromChainage || 0) || 0,
-      toChainage: parseFloat(props.to_ch || props.TO_CH || props.toChainage || 0) || 0,
-      length: parseFloat(props.length || props.LENGTH || props.len || 0) || 0,
-      width: parseFloat(props.width || props.WIDTH || 0) || 0,
-      roadType: props.roadType || props.road_type || props.ROAD_TYPE || props.type || props.TYPE || '',
-      contractor: props.contractor || props.CONTRACTOR || '',
-      constructionDate: props.constructionDate || props.construction_date || props.CONSTRUCTION_DATE || props.year || '',
-      maintenanceDate: props.maintenanceDate || props.maintenance_date || '',
-      lastRepair: props.lastRepair || props.last_repair || '',
-      surfaceMaterial: props.surfaceMaterial || props.surface || props.SURFACE || props.material || '',
-      drainageType: props.drainageType || props.drainage || props.DRAINAGE || '',
-      zone: props.zone || props.ZONE || '',
-      wardNo: props.wardNo || props.ward || props.WARD || props.ward_no || '',
-      status: props.status || props.STATUS || 'Good',
-      remarks: props.remarks || props.REMARKS || '',
+      id: String(roadId),
+      srNo,
+      fid,
+      name,
+      fromChainage,
+      toChainage,
+      length,
+      width,
+      roadType,
+      contractor,
+      constructionDate,
+      maintenanceDate,
+      lastRepair,
+      surfaceMaterial,
+      drainageType,
+      dividerOnRoad: String(dividerOnRoad),
+      numberOfLanes,
+      zone,
+      wardNo,
+      status,
+      remarks,
       geometry: feat.geometry || { type: 'LineString', coordinates: [] },
     };
   });
 }
+
 
 export default function DatasetUpload() {
   const { datasets, createNewDataset, removeDataset, switchDataset, refreshDatasets } = useDatasets();

@@ -35,7 +35,7 @@ function rowToRoad(row) {
 
 // GET /api/roads — paginated, filtered, searchable
 router.get('/', (req, res) => {
-  const { page = 1, limit = 50, type, status, search, datasetId, zone, wardNo, sortField = 'sr_no', sortDir = 'asc' } = req.query;
+  const { page = 1, limit = 50, type, status, search, datasetId, zone, wardNo, sortField = 'fid', sortDir = 'asc' } = req.query;
 
   if (!datasetId) return res.status(400).json({ error: 'datasetId is required' });
 
@@ -55,8 +55,8 @@ router.get('/', (req, res) => {
   const whereClause = where.join(' AND ');
 
   // Validate sort field to prevent SQL injection
-  const validSortFields = { sr_no: 'sr_no', name: 'name', road_type: 'road_type', length: 'length', width: 'width', status: 'status', zone: 'zone', ward_no: 'ward_no', srNo: 'sr_no', roadType: 'road_type', wardNo: 'ward_no' };
-  const dbSortField = validSortFields[sortField] || 'sr_no';
+  const validSortFields = { fid: 'fid', sr_no: 'sr_no', name: 'name', road_type: 'road_type', length: 'length', width: 'width', status: 'status', zone: 'zone', ward_no: 'ward_no', srNo: 'sr_no', roadType: 'road_type', wardNo: 'ward_no' };
+  const dbSortField = validSortFields[sortField] || 'fid';
   const dbSortDir = sortDir === 'desc' ? 'DESC' : 'ASC';
 
   const total = db.prepare(`SELECT COUNT(*) as c FROM roads WHERE ${whereClause}`).get(...params).c;
@@ -80,7 +80,7 @@ router.get('/export', async (req, res) => {
   if (!datasetId) return res.status(400).json({ error: 'datasetId is required' });
 
   const rows = db.prepare(
-    'SELECT * FROM roads WHERE dataset_id = ? ORDER BY sr_no ASC, fid ASC'
+    'SELECT * FROM roads WHERE dataset_id = ? ORDER BY fid ASC'
   ).all(parseInt(datasetId));
 
   const dataset = db.prepare('SELECT name FROM datasets WHERE id = ?').get(parseInt(datasetId));
@@ -257,7 +257,7 @@ router.get('/export-gpkg', (req, res) => {
   const { datasetId } = req.query;
   if (!datasetId) return res.status(400).json({ error: 'datasetId is required' });
 
-  const rows = db.prepare('SELECT * FROM roads WHERE dataset_id = ? ORDER BY sr_no ASC, fid ASC').all(parseInt(datasetId));
+  const rows = db.prepare('SELECT * FROM roads WHERE dataset_id = ? ORDER BY fid ASC').all(parseInt(datasetId));
   const dataset = db.prepare('SELECT name FROM datasets WHERE id = ?').get(parseInt(datasetId));
   const datasetName = dataset?.name || 'roads';
 
@@ -397,7 +397,7 @@ router.get('/export-gpkg', (req, res) => {
 
 // GET /api/roads/all/:datasetId — get ALL roads for a dataset (map view)
 router.get('/all/:datasetId', (req, res) => {
-  const rows = db.prepare('SELECT * FROM roads WHERE dataset_id = ? ORDER BY sr_no ASC, fid ASC').all(parseInt(req.params.datasetId));
+  const rows = db.prepare('SELECT * FROM roads WHERE dataset_id = ? ORDER BY fid ASC').all(parseInt(req.params.datasetId));
   res.json(rows.map(rowToRoad));
 });
 

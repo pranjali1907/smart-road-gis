@@ -113,7 +113,7 @@ export default function RoadDetail({ roadId, onClose, onSelectRoad }) {
       {/* Header */}
       <div className="detail-header">
         <div className="detail-title-group">
-          <span className="detail-id">Sr. No. {road.srNo} — {road.id}</span>
+          <span className="detail-id">Sr. No. {road.fid} — {road.id}</span>
           <h2 className="detail-title">{road.name || `Road #${road.srNo || road.fid || road.id}`}</h2>
           <div className="detail-badges">
             <span className="type-badge" style={{ '--badge-color': ROAD_TYPE_COLORS[road.roadType] || '#94a3b8' }}>

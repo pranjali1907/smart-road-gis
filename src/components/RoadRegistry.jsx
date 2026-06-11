@@ -24,7 +24,7 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [sortField, setSortField] = useState('sr_no');
+  const [sortField, setSortField] = useState('fid');
   const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
 
@@ -167,8 +167,8 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
         <table className="registry-table">
           <thead>
             <tr>
-              <th onClick={() => toggleSort('sr_no')}>
-                Sr. No. <ArrowUpDown size={12} className={sortField === 'sr_no' ? 'active' : ''} />
+              <th onClick={() => toggleSort('fid')}>
+                Sr. No. <ArrowUpDown size={12} className={sortField === 'fid' ? 'active' : ''} />
               </th>
               <th onClick={() => toggleSort('name')}>
                 Road Name <ArrowUpDown size={12} className={sortField === 'name' ? 'active' : ''} />
@@ -203,7 +203,7 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
                 onClick={() => !isRestrictedUser && onSelectRoad(road.id)}
                 className={`registry-row ${isRestrictedUser ? 'viewer-row' : ''}`}
               >
-                <td className="road-id">{road.srNo ?? '—'}</td>
+                <td className="road-id">{road.fid ?? '—'}</td>
                 <td className="road-name-cell">
                   <span className="road-name-text">{road.name || `Road #${road.srNo || road.fid || road.id}`}</span>
                 </td>

@@ -4,13 +4,18 @@ import { useAuth } from '../context/AuthContext';
 import { ROAD_TYPES, SURFACE_MATERIALS, DRAINAGE_TYPES, ROAD_STATUSES, ZONES, ROAD_TYPE_COLORS, STATUS_COLORS, WARDS } from '../data/sampleRoads';
 import {
   X, Edit3, Save, MapPin, Route, Ruler, Calendar, User, Wrench,
-  Droplets, Construction, FileText, Check, Hash, Shield
+  Droplets, Construction, FileText, Check, Hash, Shield, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
-export default function RoadDetail({ roadId, onClose }) {
-  const { getRoadById, updateRoad } = useRoads();
+export default function RoadDetail({ roadId, onClose, onSelectRoad }) {
+  const { getRoadById, updateRoad, roads } = useRoads();
   const { isAdmin, currentUser, isAuthenticated } = useAuth();
   const road = getRoadById(roadId);
+
+  const currentIndex = roads.findIndex(r => String(r.id) === String(roadId));
+  const totalRoads = roads.length;
+  const prevRoad = currentIndex > 0 ? roads[currentIndex - 1] : null;
+  const nextRoad = currentIndex < totalRoads - 1 ? roads[currentIndex + 1] : null;
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
@@ -109,7 +114,7 @@ export default function RoadDetail({ roadId, onClose }) {
       <div className="detail-header">
         <div className="detail-title-group">
           <span className="detail-id">Sr. No. {road.srNo} — {road.id}</span>
-          <h2 className="detail-title">{road.name || 'Unnamed Road'}</h2>
+          <h2 className="detail-title">{road.name || `Road #${road.srNo || road.fid || road.id}`}</h2>
           <div className="detail-badges">
             <span className="type-badge" style={{ '--badge-color': ROAD_TYPE_COLORS[road.roadType] || '#94a3b8' }}>
               {road.roadType || 'Unknown'}
@@ -197,6 +202,33 @@ export default function RoadDetail({ roadId, onClose }) {
           {renderField('Remarks', 'remarks', { type: 'textarea', icon: FileText })}
         </div>
       </div>
+
+      {/* Footer Navigation */}
+      {onSelectRoad && totalRoads > 1 && (
+        <div className="detail-footer">
+          <button
+            className="btn-secondary"
+            onClick={() => onSelectRoad(prevRoad.id)}
+            disabled={!prevRoad}
+            style={{ gap: '0.25rem', padding: '0.4rem 0.75rem', fontSize: '0.78rem' }}
+          >
+            <ChevronLeft size={16} />
+            Previous
+          </button>
+          <span className="detail-progress-text" style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+            Road {currentIndex + 1} of {totalRoads}
+          </span>
+          <button
+            className="btn-secondary"
+            onClick={() => onSelectRoad(nextRoad.id)}
+            disabled={!nextRoad}
+            style={{ gap: '0.25rem', padding: '0.4rem 0.75rem', fontSize: '0.78rem' }}
+          >
+            Next
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

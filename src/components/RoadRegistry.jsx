@@ -205,7 +205,7 @@ export default function RoadRegistry({ onSelectRoad, onAddRoad, onViewOnMap }) {
               >
                 <td className="road-id">{road.srNo ?? '—'}</td>
                 <td className="road-name-cell">
-                  <span className="road-name-text">{road.name || '—'}</span>
+                  <span className="road-name-text">{road.name || `Road #${road.srNo || road.fid || road.id}`}</span>
                 </td>
                 <td>
                   <span className="type-badge" style={{ '--badge-color': ROAD_TYPE_COLORS[road.roadType] || '#94a3b8' }}>

@@ -63,7 +63,7 @@ router.get('/', (req, res) => {
 
   const offset = (parseInt(page) - 1) * parseInt(limit);
   const rows = db.prepare(
-    `SELECT * FROM roads WHERE ${whereClause} ORDER BY ${dbSortField} ${dbSortDir} LIMIT ? OFFSET ?`
+    `SELECT * FROM roads WHERE ${whereClause} ORDER BY ${dbSortField} ${dbSortDir}, fid ASC LIMIT ? OFFSET ?`
   ).all(...params, parseInt(limit), offset);
 
   res.json({
@@ -80,7 +80,7 @@ router.get('/export', async (req, res) => {
   if (!datasetId) return res.status(400).json({ error: 'datasetId is required' });
 
   const rows = db.prepare(
-    'SELECT * FROM roads WHERE dataset_id = ? ORDER BY sr_no ASC'
+    'SELECT * FROM roads WHERE dataset_id = ? ORDER BY sr_no ASC, fid ASC'
   ).all(parseInt(datasetId));
 
   const dataset = db.prepare('SELECT name FROM datasets WHERE id = ?').get(parseInt(datasetId));
@@ -257,7 +257,7 @@ router.get('/export-gpkg', (req, res) => {
   const { datasetId } = req.query;
   if (!datasetId) return res.status(400).json({ error: 'datasetId is required' });
 
-  const rows = db.prepare('SELECT * FROM roads WHERE dataset_id = ? ORDER BY sr_no ASC').all(parseInt(datasetId));
+  const rows = db.prepare('SELECT * FROM roads WHERE dataset_id = ? ORDER BY sr_no ASC, fid ASC').all(parseInt(datasetId));
   const dataset = db.prepare('SELECT name FROM datasets WHERE id = ?').get(parseInt(datasetId));
   const datasetName = dataset?.name || 'roads';
 
@@ -397,7 +397,7 @@ router.get('/export-gpkg', (req, res) => {
 
 // GET /api/roads/all/:datasetId — get ALL roads for a dataset (map view)
 router.get('/all/:datasetId', (req, res) => {
-  const rows = db.prepare('SELECT * FROM roads WHERE dataset_id = ? ORDER BY sr_no ASC').all(parseInt(req.params.datasetId));
+  const rows = db.prepare('SELECT * FROM roads WHERE dataset_id = ? ORDER BY sr_no ASC, fid ASC').all(parseInt(req.params.datasetId));
   res.json(rows.map(rowToRoad));
 });
 

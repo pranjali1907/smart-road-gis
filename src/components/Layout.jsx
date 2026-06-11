@@ -341,7 +341,7 @@ export default function Layout() {
 
       {/* Road detail panel */}
       {selectedRoadId && (
-        <RoadDetail roadId={selectedRoadId} onClose={handleCloseDetail} />
+        <RoadDetail roadId={selectedRoadId} onClose={handleCloseDetail} onSelectRoad={handleSelectRoad} />
       )}
 
       {/* Add road modal */}

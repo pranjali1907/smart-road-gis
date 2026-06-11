@@ -163,6 +163,20 @@ function initSchema() {
     `).run(SA_USERNAME, SA_EMAIL, hashed, SA_FULLNAME);
     console.log(`  ✓ Superadmin created from .env (username: ${SA_USERNAME})`);
   }
+
+  // ── Clean up any legacy default datasets and user/admin accounts ──────────
+  try {
+    const deletedDataset = db.prepare("DELETE FROM datasets WHERE name = 'Default Dataset' AND uploaded_by = 'system'").run();
+    if (deletedDataset.changes > 0) {
+      console.log('  ✓ Cleaned up legacy Default Dataset');
+    }
+    const deletedUsers = db.prepare("DELETE FROM users WHERE username IN ('admin', 'user') AND role IN ('admin', 'user')").run();
+    if (deletedUsers.changes > 0) {
+      console.log('  ✓ Cleaned up default user and admin login accounts');
+    }
+  } catch (err) {
+    console.error('  ✗ Error cleaning up legacy data:', err.message);
+  }
 }
 
 function migrateExistingData() {
@@ -177,11 +191,9 @@ function migrateExistingData() {
 
   console.log('  ⟳ Migrating existing data...');
 
-  // Migrate users
+  // Migrate users — only seed the superadmin by default
   const USERS_FILE = path.join(DATA_DIR, 'users.json');
   let users = [
-    { id: 1, username: 'admin', email: 'admin@smartroad.gov', password: 'admin123', role: 'admin', fullName: 'System Admin', createdAt: '2025-01-01T00:00:00Z' },
-    { id: 2, username: 'user', email: 'user@smartroad.gov', password: 'user123', role: 'user', fullName: 'Regular User', createdAt: '2025-01-15T00:00:00Z' },
     { id: 3, username: 'superadmin', email: 'super@smartroad.gov', password: 'super123', role: 'superadmin', fullName: 'Super Admin', createdAt: '2025-01-01T00:00:00Z' },
   ];
   if (fs.existsSync(USERS_FILE)) {

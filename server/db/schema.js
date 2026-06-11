@@ -245,8 +245,8 @@ function migrateExistingData() {
           };
 
           const srNo = get('srNo', 'sr.no', 'sr_no', 'SR_NO') ?? i + 1;
-          const roadId = get('id', 'ID', 'road id', 'road_id') || get('fid', 'FID') || `ROAD-${String(i+1).padStart(4, '0')}`;
           const fid = get('fid', 'FID') ?? i + 1;
+          const roadId = `RD-${String(fid || i + 1).padStart(6, '0')}`;
           const roadName = get('name', 'NAME', 'road_name', 'ROAD_NAME', 'road name') || '';
           const zone = String(get('zone', 'ZONE') ?? '');
           const wardNo = String(get('wardNo', 'ward', 'WARD', 'ward_no', 'ward no') ?? '');

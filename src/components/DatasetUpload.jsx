@@ -56,8 +56,8 @@ function featuresToRoads(features) {
     };
 
     const srNo = get('srNo', 'sr_no', 'SR_NO', 'sr.no', 'serial') ?? i + 1;
-    const roadId = get('id', 'ID', 'road id', 'road_id', 'ROAD_ID') || get('fid', 'FID') || `IMPORT-${String(i + 1).padStart(4, '0')}`;
     const fid = get('fid', 'FID') ?? i + 1;
+    const roadId = `RD-${String(fid || i + 1).padStart(6, '0')}`;
     const name = get('name', 'NAME', 'road_name', 'ROAD_NAME', 'road name') || '';
     const fromChainage = parseFloat(get('from_ch', 'FROM_CH', 'fromChainage', 'from_chainage') ?? getByPrefix('from china', 'from ch') ?? 0) || 0;
     const toChainage = parseFloat(get('to_ch', 'TO_CH', 'toChainage', 'to_chainage') ?? getByPrefix('to china', 'to ch') ?? 0) || 0;

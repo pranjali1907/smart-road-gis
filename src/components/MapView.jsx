@@ -77,12 +77,12 @@ const SANGLI_CENTER = [16.852, 74.570];
 
 /* ─── Zoom-responsive line weight ─── */
 function getWeightForZoom(z) {
-  if (z >= 18) return 5;
-  if (z >= 17) return 4;
-  if (z >= 16) return 3;
-  if (z >= 15) return 2.5;
-  if (z >= 14) return 2;
-  return 1.5;
+  if (z >= 18) return 6.5;
+  if (z >= 17) return 5.5;
+  if (z >= 16) return 4.5;
+  if (z >= 15) return 3.5;
+  if (z >= 14) return 2.5;
+  return 2.0;
 }
 
 /* ─── Fly to a selected road ─── */
@@ -184,7 +184,7 @@ function GeoTIFFLayer({ imagery, visible }) {
 }
 
 /* ─── GeoJSON roads layer (native Leaflet for performance) ─── */
-function RoadsGeoJSONLayer({ roads, filter, selectedRoadId, onSelectRoad }) {
+function RoadsGeoJSONLayer({ roads, filter, selectedRoadId, onSelectRoad, isOutline }) {
   const map = useMap();
   const layerRef = useRef(null);
   const selectedIdRef = useRef(selectedRoadId);
@@ -224,23 +224,34 @@ function RoadsGeoJSONLayer({ roads, filter, selectedRoadId, onSelectRoad }) {
     return (feature) => {
       const color = ROAD_TYPE_COLORS[feature.properties.roadType] || '#94a3b8';
       const isSelected = feature.properties.id === selId;
+
+      if (isOutline) {
+        return {
+          color: isSelected ? '#ffffff' : '#000000', // Selected outline glow is white, normal is black
+          weight: isSelected ? w + 4.5 : w + 2.5,
+          opacity: isSelected ? 0.95 : 0.65,
+          lineJoin: 'round',
+          lineCap: 'round',
+        };
+      }
+
       return {
-        color: isSelected ? '#2563eb' : color,
-        weight: isSelected ? w + 2 : w,
-        opacity: isSelected ? 1 : 0.75,
+        color: isSelected ? '#3b82f6' : color, // Glowing blue when selected, normal road color otherwise
+        weight: isSelected ? w + 0.5 : w,
+        opacity: isSelected ? 1.0 : 0.85,
         lineJoin: 'round',
         lineCap: 'round',
         dashArray: feature.properties.status === 'Poor' ? '6 3' : undefined,
       };
     };
-  }, [map]);
+  }, [map, isOutline]);
 
   // Rebuild the GeoJSON layer only when the road data or map changes (NOT on selection change)
   useEffect(() => {
     if (layerRef.current) map.removeLayer(layerRef.current);
     const layer = L.geoJSON(geojsonData, {
       style: makeStyleFn(),
-      onEachFeature: (feature, lyr) => {
+      onEachFeature: isOutline ? undefined : (feature, lyr) => {
         lyr.on('click', () => onSelectRef.current(feature.properties.id));
         const p = feature.properties;
         lyr.bindPopup(`
@@ -437,12 +448,20 @@ export default function MapView({ selectedRoadId, onSelectRoad }) {
             />
           ))}
 
-          {/* Road lines */}
+          {/* Road lines (Double layer for high-contrast outlines) */}
           <RoadsGeoJSONLayer
             roads={roads}
             filter={filter}
             selectedRoadId={selectedRoadId}
             onSelectRoad={onSelectRoad}
+            isOutline={true}
+          />
+          <RoadsGeoJSONLayer
+            roads={roads}
+            filter={filter}
+            selectedRoadId={selectedRoadId}
+            onSelectRoad={onSelectRoad}
+            isOutline={false}
           />
 
           {selectedRoad && <FlyToRoad road={selectedRoad} />}

@@ -186,6 +186,25 @@ export async function importRoadsToDataset(datasetId, roads, mode = 'append') {
   return await res.json();
 }
 
+export async function uploadAndImportDataset({ file, name, description, mode, datasetId }) {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (name) formData.append('name', name);
+  if (description) formData.append('description', description);
+  if (mode) formData.append('mode', mode);
+  if (datasetId) formData.append('datasetId', datasetId);
+
+  const res = await fetch(`${API_BASE}/datasets/upload-import`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to upload and import dataset');
+  return data;
+}
+
 export async function setDefaultDataset(id) {
   const res = await apiFetch(`/datasets/${id}/default`, { method: 'PUT' });
   return await res.json();

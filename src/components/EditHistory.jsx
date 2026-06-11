@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fetchHistory } from '../api';
+import { parseDbDate } from '../utils/dateHelper';
 import {
   History, User, Calendar, FileEdit, ArrowUpRight,
   Search, RefreshCw, ChevronLeft, ChevronRight, Globe, Download
@@ -44,7 +45,9 @@ export default function EditHistory() {
 
   const formatDate = (dateStr) => {
     try {
-      return new Date(dateStr).toLocaleString('en-IN', {
+      const date = parseDbDate(dateStr);
+      if (!date || isNaN(date.getTime())) return dateStr;
+      return date.toLocaleString('en-IN', {
         day: '2-digit', month: 'short', year: 'numeric',
         hour: '2-digit', minute: '2-digit'
       });

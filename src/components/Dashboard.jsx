@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useRoads } from '../context/RoadsContext';
 import { useDatasets } from '../context/DatasetContext';
 import { useAuth } from '../context/AuthContext';
+import { parseDbDate } from '../utils/dateHelper';
 import { ROAD_TYPE_COLORS, STATUS_COLORS } from '../data/sampleRoads';
 import {
   Route, MapPin, Ruler, AlertTriangle, CheckCircle2, BarChart3,
@@ -55,7 +56,9 @@ export default function Dashboard({ onViewOnMap }) {
 
   const getTimeAgo = (ts) => {
     if (!ts) return '';
-    const diff = Date.now() - new Date(ts).getTime();
+    const date = parseDbDate(ts);
+    if (!date || isNaN(date.getTime())) return '';
+    const diff = Date.now() - date.getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1)  return 'just now';
     if (mins < 60) return `${mins}m ago`;

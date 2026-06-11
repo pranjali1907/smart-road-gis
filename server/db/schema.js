@@ -205,6 +205,9 @@ function migrateExistingData() {
   insertUserTx(users);
   console.log(`    ✓ ${users.length} users migrated (passwords hashed)`);
 
+  // No default data or initial datasets/roads seeded (per user requirements)
+  return;
+
   // Create default dataset
   const res = db.prepare(`
     INSERT INTO datasets (name, description, uploaded_by, is_default)

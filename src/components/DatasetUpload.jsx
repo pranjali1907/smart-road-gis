@@ -2,129 +2,36 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDatasets } from '../context/DatasetContext';
 import { useRoads } from '../context/RoadsContext';
 import { useAuth } from '../context/AuthContext';
-import { importRoadsToDataset, uploadImagery, fetchImagery, deleteImagery } from '../api';
+import { uploadAndImportDataset, uploadImagery, fetchImagery, deleteImagery } from '../api';
+import { formatLocalDate } from '../utils/dateHelper';
 import {
   Upload, FileUp, AlertTriangle, CheckCircle2, X, Database,
-  FileText, Layers, ArrowRight, RefreshCw, Plus, Trash2, Calendar, User, Image as ImageIcon, MapPin
+  FileText, Layers, ArrowRight, RefreshCw, Plus, Trash2, Calendar, User,
+  Image as ImageIcon, MapPin, ChevronDown, ChevronUp, Loader2
 } from 'lucide-react';
 
-/* ─── Parse uploaded shapefile (.shp zip or individual files) ─── */
-async function parseShapefile(file) {
-  const shp = await import('shpjs');
-  const arrayBuffer = await file.arrayBuffer();
-  const geojson = await shp.default(arrayBuffer);
-
-  let features = [];
-  if (Array.isArray(geojson)) {
-    geojson.forEach(fc => {
-      if (fc.features) features.push(...fc.features);
-    });
-  } else if (geojson.features) {
-    features = geojson.features;
-  }
-
-  return features;
-}
-
-/* ─── Convert GeoJSON features to road objects ─── */
-function featuresToRoads(features) {
-  return features.map((feat, i) => {
-    const props = feat.properties || {};
-
-    // Helper: get value from first matching key (case-insensitive, handles spaces and truncation)
-    const get = (...keys) => {
-      for (const key of keys) {
-        // Exact match first
-        if (props[key] !== undefined && props[key] !== null) return props[key];
-        // Case-insensitive match
-        const lower = key.toLowerCase();
-        const found = Object.keys(props).find(k => k.toLowerCase() === lower);
-        if (found && props[found] !== undefined && props[found] !== null) return props[found];
-      }
-      // Partial/prefix match for truncated GPKG columns (e.g. "from china" for "from chainage")
-      return undefined;
-    };
-
-    // Specific matchers for truncated fields — match by prefix
-    const getByPrefix = (...prefixes) => {
-      for (const prefix of prefixes) {
-        const lower = prefix.toLowerCase();
-        const found = Object.keys(props).find(k => k.toLowerCase().startsWith(lower));
-        if (found && props[found] !== undefined && props[found] !== null) return props[found];
-      }
-      return undefined;
-    };
-
-    const srNo = get('srNo', 'sr_no', 'SR_NO', 'sr.no', 'serial') ?? i + 1;
-    const fid = get('fid', 'FID') ?? i + 1;
-    const roadId = `RD-${String(fid || i + 1).padStart(6, '0')}`;
-    const name = get('name', 'NAME', 'road_name', 'ROAD_NAME', 'road name') || '';
-    const fromChainage = parseFloat(get('from_ch', 'FROM_CH', 'fromChainage', 'from_chainage') ?? getByPrefix('from china', 'from ch') ?? 0) || 0;
-    const toChainage = parseFloat(get('to_ch', 'TO_CH', 'toChainage', 'to_chainage') ?? getByPrefix('to china', 'to ch') ?? 0) || 0;
-    const length = parseFloat(get('length', 'LENGTH', 'len') ?? getByPrefix('total leng') ?? 0) || 0;
-    const width = parseFloat(get('width', 'WIDTH') ?? 0) || 0;
-    const roadType = get('roadType', 'road_type', 'ROAD_TYPE', 'type', 'TYPE', 'road type') || '';
-    const contractor = get('contractor', 'CONTRACTOR') || '';
-    const constructionDate = String(get('constructionDate', 'construction_date', 'CONSTRUCTION_DATE', 'year') ?? getByPrefix('y construc') ?? '');
-    const maintenanceDate = String(get('maintenanceDate', 'maintenance_date') ?? getByPrefix('maintainan', 'maintenan') ?? '');
-    const lastRepair = String(get('lastRepair', 'last_repair') ?? getByPrefix('la repair', 'last rep') ?? '');
-    const surfaceMaterial = get('surfaceMaterial', 'surface', 'SURFACE', 'material', 'surface_material') ?? getByPrefix('sur materi') ?? '';
-    const drainageType = get('drainageType', 'drainage', 'DRAINAGE', 'drainage_type') ?? getByPrefix('drinage ty', 'drainage t') ?? '';
-    const dividerOnRoad = get('dividerOnRoad', 'divider_on_road', 'divider') ?? getByPrefix('divider') ?? 'No';
-    const numberOfLanes = parseInt(get('numberOfLanes', 'number_of_lanes', 'lanes') ?? getByPrefix('number of') ?? 2) || 2;
-    const zone = String(get('zone', 'ZONE') ?? '');
-    const wardNo = String(get('wardNo', 'ward', 'WARD', 'ward_no', 'ward no') ?? '');
-    const status = get('status', 'STATUS') || 'Good';
-    const remarks = get('remarks', 'REMARKS', 'remark') || '';
-
-    return {
-      id: String(roadId),
-      srNo,
-      fid,
-      name,
-      fromChainage,
-      toChainage,
-      length,
-      width,
-      roadType,
-      contractor,
-      constructionDate,
-      maintenanceDate,
-      lastRepair,
-      surfaceMaterial,
-      drainageType,
-      dividerOnRoad: String(dividerOnRoad),
-      numberOfLanes,
-      zone,
-      wardNo,
-      status,
-      remarks,
-      geometry: feat.geometry || { type: 'LineString', coordinates: [] },
-    };
-  });
-}
-
-
 export default function DatasetUpload() {
-  const { datasets, createNewDataset, removeDataset, switchDataset, refreshDatasets } = useDatasets();
+  const { datasets, removeDataset, switchDataset, refreshDatasets } = useDatasets();
   const { refreshRoads } = useRoads();
   const { currentUser } = useAuth();
+  
   const fileInputRef = useRef(null);
-
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
-  const [preview, setPreview] = useState(null);
-  const [importMode, setImportMode] = useState('replace');
   const [success, setSuccess] = useState('');
+  
+  // Selected file state
+  const [selectedFile, setSelectedFile] = useState(null);
   const [datasetName, setDatasetName] = useState('');
   const [selectedExistingDataset, setSelectedExistingDataset] = useState(null);
+  const [importMode, setImportMode] = useState('replace'); // 'replace' or 'append'
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Imagery state
   const imageryInputRef = useRef(null);
   const [imageryList, setImageryList] = useState([]);
-  const [imageryFiles, setImageryFiles] = useState([]); // array of File objects
-
+  const [imageryFiles, setImageryFiles] = useState([]);
   const [imageryUploading, setImageryUploading] = useState(false);
   const [imageryError, setImageryError] = useState('');
   const [imagerySuccess, setImagerySuccess] = useState('');
@@ -134,12 +41,9 @@ export default function DatasetUpload() {
     fetchImagery().then(setImageryList);
   }, []);
 
-
-  const handleFile = useCallback(async (file) => {
+  const handleFileSelect = (file) => {
     setError('');
     setSuccess('');
-    setPreview(null);
-
     if (!file) return;
 
     const name = file.name.toLowerCase();
@@ -151,73 +55,18 @@ export default function DatasetUpload() {
       return;
     }
 
-    setUploading(true);
-
-    try {
-      let features;
-
-      if (ext === '.geojson' || ext === '.json') {
-        const text = await file.text();
-        const geojson = JSON.parse(text);
-        if (geojson.type === 'FeatureCollection' && geojson.features) {
-          features = geojson.features;
-        } else if (geojson.type === 'Feature') {
-          features = [geojson];
-        } else {
-          throw new Error('Invalid GeoJSON: expected FeatureCollection or Feature');
-        }
-      } else if (ext === '.gpkg') {
-        const { parseGpkgFile } = await import('../api');
-        const result = await parseGpkgFile(file);
-        features = result.features;
-      } else {
-        features = await parseShapefile(file);
-      }
-
-      if (!features || features.length === 0) {
-        throw new Error('No features found in the uploaded file.');
-      }
-
-      const convertedRoads = featuresToRoads(features);
-      const lineStrings = features.filter(f => f.geometry?.type === 'LineString' || f.geometry?.type === 'MultiLineString').length;
-      const points = features.filter(f => f.geometry?.type === 'Point').length;
-      const polygons = features.filter(f => f.geometry?.type === 'Polygon').length;
-
-      const allKeys = new Set();
-      features.forEach(f => {
-        if (f.properties) Object.keys(f.properties).forEach(k => allKeys.add(k));
-      });
-
-      // Auto-generate dataset name from filename
-      const baseName = file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
-      setDatasetName(baseName);
-
-      setPreview({
-        features,
-        roads: convertedRoads,
-        fileName: file.name,
-        stats: {
-          total: features.length,
-          lineStrings,
-          points,
-          polygons,
-          attributeKeys: Array.from(allKeys).slice(0, 20),
-        },
-      });
-    } catch (err) {
-      console.error('Upload error:', err);
-      setError(`Failed to parse file: ${err.message}`);
-    } finally {
-      setUploading(false);
-    }
-  }, []);
+    setSelectedFile(file);
+    // Auto-generate name based on filename
+    const baseName = file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+    setDatasetName(baseName);
+  };
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer?.files?.[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+    if (file) handleFileSelect(file);
+  }, []);
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -228,73 +77,81 @@ export default function DatasetUpload() {
 
   const handleFileInput = (e) => {
     const file = e.target.files?.[0];
-    if (file) handleFile(file);
+    if (file) handleFileSelect(file);
   };
 
   const handleImport = async () => {
-    if (!preview) return;
+    if (!selectedFile) return;
+
+    setUploading(true);
+    setError('');
+    setSuccess('');
 
     try {
-      let targetDatasetId;
-
-      if (selectedExistingDataset) {
-        // Import into existing dataset
-        targetDatasetId = selectedExistingDataset;
-      } else {
-        // Create new dataset
-        if (!datasetName.trim()) {
-          setError('Please provide a name for the dataset');
-          return;
-        }
-        const newDataset = await createNewDataset(datasetName.trim(), `Uploaded from ${preview.fileName}`);
-        if (!newDataset) {
-          setError('Failed to create dataset');
-          return;
-        }
-        targetDatasetId = newDataset.id;
+      const targetDatasetId = selectedExistingDataset || null;
+      
+      if (!targetDatasetId && !datasetName.trim()) {
+        setError('Please enter a name for the new dataset.');
+        setUploading(false);
+        return;
       }
 
-      // Import roads into the dataset
-      const result = await importRoadsToDataset(targetDatasetId, preview.roads, importMode);
+      const result = await uploadAndImportDataset({
+        file: selectedFile,
+        name: targetDatasetId ? null : datasetName.trim(),
+        description: targetDatasetId ? null : `Uploaded from ${selectedFile.name}`,
+        mode: importMode,
+        datasetId: targetDatasetId
+      });
+
       if (result.success) {
-        setSuccess(`Successfully imported ${preview.roads.length} roads from "${preview.fileName}" into dataset`);
-        setPreview(null);
+        setSuccess(`Successfully imported ${result.importedCount} roads from "${selectedFile.name}"!`);
+        setSelectedFile(null);
         setDatasetName('');
         setSelectedExistingDataset(null);
-
-        // Switch to the new dataset and refresh
-        switchDataset(targetDatasetId);
+        
+        // Auto-switch dataset and refresh client data context (instantly updates UI without refresh)
+        switchDataset(result.dataset.id);
         await refreshDatasets();
         await refreshRoads();
       } else {
-        setError('Import failed: ' + (result.error || 'Unknown error'));
+        setError(result.error || 'Failed to import dataset');
       }
     } catch (err) {
-      setError('Import failed: ' + err.message);
+      console.error('Import error:', err);
+      setError(err.message || 'An error occurred during import.');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleCancelPreview = () => {
-    setPreview(null);
-    setError('');
+  const handleCancelSelection = () => {
+    setSelectedFile(null);
     setDatasetName('');
     setSelectedExistingDataset(null);
+    setError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDeleteDataset = async (id) => {
-    if (!confirm('Are you sure? This will permanently delete the dataset and all its roads.')) return;
-    await removeDataset(id);
+    if (!confirm('Are you sure you want to delete this dataset? All associated roads and history will be permanently deleted.')) return;
+    try {
+      await removeDataset(id);
+      setSuccess('Dataset deleted successfully.');
+      await refreshDatasets();
+      await refreshRoads();
+    } catch (err) {
+      setError(err.message || 'Failed to delete dataset');
+    }
   };
 
   return (
     <div className="dataset-upload">
       <div className="upload-header">
         <div className="upload-header-text">
-          <h2><Database size={22} /> Upload Dataset</h2>
-          <p>Import road data from Shapefile (.shp/.zip) or GeoJSON files. Each upload creates a named dataset that all users can select.</p>
+          <h2><Database size={22} /> GIS Datasets</h2>
+          <p>Import road network datasets from GeoPackage (.gpkg), Shapefile (.zip), or GeoJSON files directly. Features are processed efficiently on the server.</p>
         </div>
         <div className="upload-current-stats">
           <div className="upload-stat">
@@ -304,7 +161,249 @@ export default function DatasetUpload() {
         </div>
       </div>
 
-      {/* Existing Datasets List */}
+      {/* Success/Error Banners */}
+      {success && (
+        <div className="upload-success animate-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%' }}>
+          <CheckCircle2 size={18} />
+          <span style={{ flexGrow: 1 }}>{success}</span>
+          <button className="btn-icon" onClick={() => setSuccess('')}><X size={14} /></button>
+        </div>
+      )}
+
+      {error && (
+        <div className="upload-error animate-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%' }}>
+          <AlertTriangle size={18} />
+          <span style={{ flexGrow: 1 }}>{error}</span>
+          <button className="btn-icon" onClick={() => setError('')}><X size={14} /></button>
+        </div>
+      )}
+
+      {/* MAIN UPLOAD INTERFACE */}
+      {!selectedFile ? (
+        <div
+          className={`upload-dropzone ${dragOver ? 'drag-over' : ''}`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            border: '2px dashed var(--primary)',
+            borderRadius: '12px',
+            padding: '3rem 2rem',
+            textAlign: 'center',
+            background: dragOver ? 'var(--bg-alt)' : 'var(--surface)',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '1rem',
+            boxShadow: dragOver ? '0 0 20px rgba(99, 102, 241, 0.15)' : 'none'
+          }}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".zip,.shp,.geojson,.json,.gpkg"
+            onChange={handleFileInput}
+            style={{ display: 'none' }}
+          />
+          <FileUp size={48} style={{ color: 'var(--primary)', animation: dragOver ? 'bounce 1s infinite' : 'none' }} />
+          <div>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text)', marginBottom: '0.25rem' }}>
+              Drag and drop your file here, or click to browse
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              Supports GeoPackage (.gpkg), Shapefile (.zip), and GeoJSON (.geojson, .json)
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div
+          className="selected-file-panel animate-fade-in"
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '12px',
+            padding: '1.5rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.25rem'
+          }}
+        >
+          {/* File Card Info */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ background: 'var(--primary-light)', padding: '0.5rem', borderRadius: '8px', color: 'var(--primary)' }}>
+                <FileText size={24} />
+              </div>
+              <div>
+                <h4 style={{ fontWeight: 600, color: 'var(--text)', fontSize: '0.95rem' }}>{selectedFile.name}</h4>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {(selectedFile.size / 1024 / 1024).toFixed(2)} MB · {selectedFile.name.split('.').pop().toUpperCase()} File
+                </p>
+              </div>
+            </div>
+            <button className="btn btn-outline btn-sm" onClick={handleCancelSelection} disabled={uploading} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <X size={14} /> Clear Selection
+            </button>
+          </div>
+
+          {/* Simple dataset name configuration */}
+          {!selectedExistingDataset && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Dataset Name</label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Enter dataset name..."
+                value={datasetName}
+                onChange={e => setDatasetName(e.target.value)}
+                disabled={uploading}
+                style={{
+                  width: '100%',
+                  padding: '0.625rem 0.875rem',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-alt)',
+                  color: 'var(--text)',
+                  fontSize: '0.85rem'
+                }}
+              />
+            </div>
+          )}
+
+          {/* Advanced Accordion Toggle */}
+          <div style={{ borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', padding: '0.75rem 0' }}>
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--primary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                padding: 0
+              }}
+            >
+              {showAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              {showAdvanced ? 'Hide Advanced Options' : 'Show Advanced Options'}
+            </button>
+
+            {showAdvanced && (
+              <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem', padding: '0.5rem 0' }}>
+                {/* Target dataset option */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Import Destination</span>
+                  <div style={{ display: 'flex', gap: '1.5rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8rem', color: 'var(--text)', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="datasetTarget"
+                        checked={!selectedExistingDataset}
+                        onChange={() => setSelectedExistingDataset(null)}
+                      />
+                      Create New Dataset
+                    </label>
+                    {datasets.length > 0 && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8rem', color: 'var(--text)', cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name="datasetTarget"
+                          checked={!!selectedExistingDataset}
+                          onChange={() => setSelectedExistingDataset(datasets[0]?.id)}
+                        />
+                        Import into Existing Dataset
+                      </label>
+                    )}
+                  </div>
+                  {selectedExistingDataset && (
+                    <select
+                      className="input-field"
+                      value={selectedExistingDataset || ''}
+                      onChange={e => setSelectedExistingDataset(parseInt(e.target.value))}
+                      style={{
+                        padding: '0.5rem',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-alt)',
+                        color: 'var(--text)',
+                        fontSize: '0.8rem',
+                        marginTop: '0.25rem',
+                        width: '100%',
+                        maxWidth: '400px'
+                      }}
+                    >
+                      {datasets.map(ds => (
+                        <option key={ds.id} value={ds.id}>{ds.name} ({ds.roadCount} roads)</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Import mode option */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Import Mode</span>
+                  <div style={{ display: 'flex', gap: '1.5rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8rem', color: 'var(--text)', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="importMode"
+                        checked={importMode === 'replace'}
+                        onChange={() => setImportMode('replace')}
+                      />
+                      Replace all roads in dataset
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8rem', color: 'var(--text)', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="importMode"
+                        checked={importMode === 'append'}
+                        onChange={() => setImportMode('append')}
+                      />
+                      Combine / Append roads
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Import actions */}
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+            {uploading && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: 'auto' }}>
+                <Loader2 size={18} className="spin-icon" style={{ color: 'var(--primary)' }} />
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Uploading & processing on server... Please wait.
+                </span>
+              </div>
+            )}
+            <button className="btn btn-secondary" onClick={handleCancelSelection} disabled={uploading}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" onClick={handleImport} disabled={uploading} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {uploading ? (
+                <>
+                  <Loader2 size={14} className="spin-icon" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  {selectedExistingDataset ? 'Import Data' : 'Create & Import'}
+                  <ArrowRight size={14} />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Uploaded Datasets List */}
       {datasets.length > 0 && (
         <div className="existing-datasets-section">
           <h3><Database size={16} /> Uploaded Datasets</h3>
@@ -319,13 +418,14 @@ export default function DatasetUpload() {
                   <span className="dataset-card-meta">
                     <span><Layers size={12} /> {ds.roadCount} roads</span>
                     <span><User size={12} /> {ds.uploadedBy}</span>
-                    <span><Calendar size={12} /> {new Date(ds.createdAt).toLocaleDateString()}</span>
+                    <span><Calendar size={12} /> {formatLocalDate(ds.createdAt)}</span>
                   </span>
                 </div>
                 <button
                   className="btn-icon danger-icon"
                   onClick={() => handleDeleteDataset(ds.id)}
                   title="Delete dataset"
+                  disabled={uploading}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -334,267 +434,6 @@ export default function DatasetUpload() {
           </div>
         </div>
       )}
-
-      {/* Success message */}
-      {success && (
-        <div className="upload-success animate-fade-in">
-          <CheckCircle2 size={18} />
-          <span>{success}</span>
-          <button className="btn-icon" onClick={() => setSuccess('')}><X size={14} /></button>
-        </div>
-      )}
-
-      {/* Error message */}
-      {error && (
-        <div className="upload-error animate-fade-in">
-          <AlertTriangle size={18} />
-          <span>{error}</span>
-          <button className="btn-icon" onClick={() => setError('')}><X size={14} /></button>
-        </div>
-      )}
-
-      {/* Drop zone */}
-      {!preview && (
-        <div
-          className={`upload-dropzone ${dragOver ? 'drag-over' : ''} ${uploading ? 'uploading' : ''}`}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".zip,.shp,.geojson,.json,.gpkg"
-            onChange={handleFileInput}
-            style={{ display: 'none' }}
-          />
-          <div className="dropzone-content">
-            {uploading ? (
-              <>
-                <RefreshCw size={40} className="spin-icon" />
-                <p className="dropzone-title">Parsing file...</p>
-                <span className="dropzone-hint">Processing your shapefile data</span>
-              </>
-            ) : (
-              <>
-                <FileUp size={40} />
-                <p className="dropzone-title">Drop your file here, or click to browse</p>
-                <span className="dropzone-hint">
-                  Supports: <strong>.zip</strong>, <strong>.shp</strong>, <strong>.geojson</strong>, <strong>.gpkg</strong>
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Preview panel */}
-      {preview && (
-        <div className="upload-preview animate-fade-in">
-          <div className="preview-header">
-            <div className="preview-file-info">
-              <FileText size={18} />
-              <div>
-                <span className="preview-filename">{preview.fileName}</span>
-                <span className="preview-filesize">{preview.stats.total} features detected</span>
-              </div>
-            </div>
-            <button className="btn-icon" onClick={handleCancelPreview} title="Cancel">
-              <X size={18} />
-            </button>
-          </div>
-
-          {/* Stats */}
-          <div className="preview-stats">
-            <div className="preview-stat-card">
-              <span className="preview-stat-value">{preview.stats.total}</span>
-              <span className="preview-stat-label">Total Features</span>
-            </div>
-            <div className="preview-stat-card">
-              <span className="preview-stat-value">{preview.stats.lineStrings}</span>
-              <span className="preview-stat-label">Line Strings</span>
-            </div>
-            <div className="preview-stat-card">
-              <span className="preview-stat-value">{preview.stats.points}</span>
-              <span className="preview-stat-label">Points</span>
-            </div>
-            <div className="preview-stat-card">
-              <span className="preview-stat-value">{preview.stats.polygons}</span>
-              <span className="preview-stat-label">Polygons</span>
-            </div>
-          </div>
-
-          {/* Detected attributes */}
-          <div className="preview-attributes">
-            <h4>Detected Attributes</h4>
-            <div className="attribute-chips">
-              {preview.stats.attributeKeys.map(key => (
-                <span key={key} className="attribute-chip">{key}</span>
-              ))}
-              {preview.stats.attributeKeys.length === 20 && (
-                <span className="attribute-chip more">+more</span>
-              )}
-            </div>
-          </div>
-
-          {/* Dataset Name Input */}
-          <div className="dataset-name-section">
-            <h4><Database size={16} /> Dataset Name</h4>
-            <div className="dataset-name-options">
-              <div className={`dataset-name-option ${!selectedExistingDataset ? 'active' : ''}`}>
-                <label>
-                  <input
-                    type="radio"
-                    name="datasetTarget"
-                    checked={!selectedExistingDataset}
-                    onChange={() => setSelectedExistingDataset(null)}
-                  />
-                  Create New Dataset
-                </label>
-                {!selectedExistingDataset && (
-                  <input
-                    type="text"
-                    className="dataset-name-input"
-                    placeholder="Enter a name for this dataset..."
-                    value={datasetName}
-                    onChange={e => setDatasetName(e.target.value)}
-                  />
-                )}
-              </div>
-              {datasets.length > 0 && (
-                <div className={`dataset-name-option ${selectedExistingDataset ? 'active' : ''}`}>
-                  <label>
-                    <input
-                      type="radio"
-                      name="datasetTarget"
-                      checked={!!selectedExistingDataset}
-                      onChange={() => setSelectedExistingDataset(datasets[0]?.id)}
-                    />
-                    Import into Existing Dataset
-                  </label>
-                  {selectedExistingDataset && (
-                    <select
-                      className="dataset-name-input"
-                      value={selectedExistingDataset || ''}
-                      onChange={e => setSelectedExistingDataset(parseInt(e.target.value))}
-                    >
-                      {datasets.map(ds => (
-                        <option key={ds.id} value={ds.id}>{ds.name} ({ds.roadCount} roads)</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Sample roads preview table */}
-          <div className="preview-table-section">
-            <h4>Preview (first 5 records)</h4>
-            <div className="preview-table-wrap">
-              <table className="preview-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Name</th>
-                    <th>Type</th>
-                    <th>Length</th>
-                    <th>Status</th>
-                    <th>Zone</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.roads.slice(0, 5).map((road, i) => (
-                    <tr key={i}>
-                      <td>{i + 1}</td>
-                      <td>{road.name || '—'}</td>
-                      <td>{road.roadType || '—'}</td>
-                      <td>{road.length || '—'}</td>
-                      <td>{road.status}</td>
-                      <td>{road.zone || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Import mode selection */}
-          <div className="import-mode-section">
-            <h4>Import Mode</h4>
-            <div className="import-mode-options">
-              <button
-                className={`import-mode-btn ${importMode === 'replace' ? 'active' : ''}`}
-                onClick={() => setImportMode('replace')}
-              >
-                <RefreshCw size={18} />
-                <div>
-                  <span className="mode-title">Replace</span>
-                  <span className="mode-desc">Replace existing roads in dataset with imported data ({preview.roads.length} roads)</span>
-                </div>
-              </button>
-              <button
-                className={`import-mode-btn ${importMode === 'append' ? 'active' : ''}`}
-                onClick={() => setImportMode('append')}
-              >
-                <Plus size={18} />
-                <div>
-                  <span className="mode-title">Combine (Upsert)</span>
-                  <span className="mode-desc">Update existing roads and add new ones from the dataset</span>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* Import action */}
-          <div className="import-actions">
-            <button className="btn-secondary" onClick={handleCancelPreview}>
-              Cancel
-            </button>
-            <button className="btn-primary import-btn" onClick={handleImport}>
-              <Upload size={16} />
-              {selectedExistingDataset ? 'Import into Dataset' : 'Create Dataset & Import'}
-              <ArrowRight size={14} />
-            </button>
-          </div>
-
-          {importMode === 'replace' && selectedExistingDataset && (
-            <div className="import-warning">
-              <AlertTriangle size={14} />
-              <span>This will replace all existing roads in the selected dataset with {preview.roads.length} imported roads.</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Supported formats info */}
-      <div className="upload-formats-info">
-        <h4>Supported Formats</h4>
-        <div className="format-cards">
-          <div className="format-card">
-            <div className="format-icon shp">SHP</div>
-            <div>
-              <strong>Zipped Shapefile (.zip)</strong>
-              <span>Include .shp, .dbf, .shx, and .prj files in a single ZIP archive. This is the recommended format.</span>
-            </div>
-          </div>
-          <div className="format-card">
-            <div className="format-icon geo">GEO</div>
-            <div>
-              <strong>GeoJSON (.geojson / .json)</strong>
-              <span>Standard GeoJSON FeatureCollection with road geometries and attributes.</span>
-            </div>
-          </div>
-          <div className="format-card">
-            <div className="format-icon gpkg">GPK</div>
-            <div>
-              <strong>GeoPackage (.gpkg)</strong>
-              <span>Supports point, line, and polygon feature extraction.</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* ═══ IMAGERY UPLOAD SECTION ════════════════════════════════════════ */}
       <div className="imagery-upload-section">
@@ -622,7 +461,6 @@ export default function DatasetUpload() {
         )}
 
         <div className="imagery-upload-form">
-          {/* Drop zone — supports multi-select */}
           <div
             className="imagery-file-picker"
             onClick={() => imageryInputRef.current?.click()}
@@ -637,11 +475,9 @@ export default function DatasetUpload() {
               onChange={e => {
                 const files = Array.from(e.target.files || []);
                 if (files.length) setImageryFiles(prev => {
-                  // Deduplicate by name
                   const existing = new Set(prev.map(f => f.name));
                   return [...prev, ...files.filter(f => !existing.has(f.name))];
                 });
-                // Reset input so same file can be re-added after removal
                 e.target.value = '';
               }}
             />
@@ -659,7 +495,6 @@ export default function DatasetUpload() {
             )}
           </div>
 
-          {/* File list */}
           {imageryFiles.length > 0 && (
             <div className="imagery-file-list">
               {imageryFiles.map((f, idx) => (
@@ -734,7 +569,6 @@ export default function DatasetUpload() {
           )}
         </div>
 
-        {/* Existing imagery list */}
         {imageryList.length > 0 && (
           <div className="existing-imagery-list">
             <h4 style={{ margin: '1.25rem 0 0.625rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
@@ -758,6 +592,7 @@ export default function DatasetUpload() {
                 <button
                   className="btn-icon danger-icon"
                   title="Delete imagery"
+                  disabled={uploading}
                   onClick={async () => {
                     if (!confirm(`Delete "${img.name}"?`)) return;
                     await deleteImagery(img.id);

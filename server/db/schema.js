@@ -174,6 +174,10 @@ function initSchema() {
     if (deletedUsers.changes > 0) {
       console.log('  ✓ Cleaned up default user and admin login accounts');
     }
+    const deletedImagery = db.prepare("DELETE FROM imagery").run();
+    if (deletedImagery.changes > 0) {
+      console.log('  ✓ Cleaned up legacy default imagery layers');
+    }
   } catch (err) {
     console.error('  ✗ Error cleaning up legacy data:', err.message);
   }

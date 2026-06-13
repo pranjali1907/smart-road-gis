@@ -18,23 +18,6 @@ const BASE_LAYERS = [
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19,
   },
-  {
-    id: 'satellite',
-    label: 'Satellite',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri — Source: Esri, DigitalGlobe, GeoEye, i-cubed, USDA FSA, USGS, AEX, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, GIS User Community',
-    maxZoom: 19,
-  },
-  {
-    id: 'hybrid',
-    label: 'Hybrid',
-    // Satellite base
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    // Labels overlay added separately
-    labelsUrl: 'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri',
-    maxZoom: 19,
-  },
 ];
 
 /* ── Swaps base tile layer reactively ──────────────────────────── */
@@ -362,19 +345,21 @@ export default function MapView({ selectedRoadId, onSelectRoad }) {
 
         <div className="map-toolbar-right">
           {/* Base layer switcher */}
-          <div className="base-layer-switcher">
-            {BASE_LAYERS.map(l => (
-              <button
-                key={l.id}
-                className={`base-layer-btn ${baseLayerId === l.id ? 'active' : ''}`}
-                onClick={() => setBaseLayerId(l.id)}
-                title={`Switch to ${l.label} view`}
-              >
-                {l.id === 'street' ? <Globe size={12} /> : <Satellite size={12} />}
-                {l.label}
-              </button>
-            ))}
-          </div>
+          {BASE_LAYERS.length > 1 && (
+            <div className="base-layer-switcher">
+              {BASE_LAYERS.map(l => (
+                <button
+                  key={l.id}
+                  className={`base-layer-btn ${baseLayerId === l.id ? 'active' : ''}`}
+                  onClick={() => setBaseLayerId(l.id)}
+                  title={`Switch to ${l.label} view`}
+                >
+                  {l.id === 'street' ? <Globe size={12} /> : <Satellite size={12} />}
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          )}
           {/* Imagery toggle button */}
           {imageryList.length > 0 && (
             <button
